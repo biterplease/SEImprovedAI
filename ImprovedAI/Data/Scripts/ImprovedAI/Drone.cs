@@ -48,7 +48,7 @@ namespace ImprovedAI
             ManagedByPlayer,
         }
         [Flags, ProtoContract]
-        public enum Capabilities
+        public enum Capabilities : ushort
         {
             [ProtoEnum]
             None = 0,
@@ -71,7 +71,9 @@ namespace ImprovedAI
             [ProtoEnum]
             RechargeWhenDocked = 256,
             [ProtoEnum]
-            CombatReady = 512
+            CombatReady = 512,
+            [ProtoEnum]
+            HasSensors = 1024,
         }
         [ProtoContract, Flags]
         public enum UpdateFlags : ushort
