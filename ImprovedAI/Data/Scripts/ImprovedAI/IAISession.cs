@@ -1,6 +1,6 @@
 ﻿using BetterAIConstructor.UI;
 using ImprovedAI.Config;
-using ImprovedAI.Logistics;
+using ImprovedAI.Data.Scripts.ImprovedAI;
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
@@ -28,9 +28,9 @@ namespace ImprovedAI
         private static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
 
         // Collection of all AI blocks in the world
-        public Dictionary<long, IAIDroneBlock> AIDroneControllers = new Dictionary<long, IAIDroneBlock>();
+        public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
         public Dictionary<long, IAISchedulerBlock> AIDroneSchedulers = new Dictionary<long, IAISchedulerBlock>();
-        public Dictionary<long, IAILogisticsComputer> AILogisticsComputers = new Dictionary<long, IAILogisticsComputer>();
+        public Dictionary<long, IAILogisticsComputerBlock> AILogisticsComputers = new Dictionary<long, IAILogisticsComputerBlock>();
 
         public override void LoadData()
         {
@@ -148,7 +148,7 @@ namespace ImprovedAI
             }
         }
 
-        public void RegisterDroneController(IAIDroneBlock block)
+        public void RegisterDroneController(IAIDroneControllerBlock block)
         {
             if (block?.Entity != null)
             {
@@ -165,7 +165,7 @@ namespace ImprovedAI
             }
         }
 
-        public void RegisterLogisticsComputer(IAILogisticsComputer block)
+        public void RegisterLogisticsComputer(IAILogisticsComputerBlock block)
         {
             if (block?.Entity != null)
             {

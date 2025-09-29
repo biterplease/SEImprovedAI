@@ -10,6 +10,8 @@ using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 
+using static ImprovedAI.Scheduler;
+
 namespace ImprovedAI
 {
     /// <summary>
@@ -22,7 +24,7 @@ namespace ImprovedAI
         private IAIScheduler scheduler;
 
         // Configuration
-        private SchedulerOperationMode operationMode = SchedulerOperationMode.Orchestrator;
+        private OperationMode operationMode = OperationMode.Orchestrator;
         private WorkModes workModes = WorkModes.WeldUnfinishedBlocks | WorkModes.RepairDamagedBlocks;
 
         // State tracking
@@ -196,7 +198,7 @@ namespace ImprovedAI
                 switch (key)
                 {
                     case "OperationMode":
-                        Enum.TryParse<SchedulerOperationMode>(value, out operationMode);
+                        Enum.TryParse<OperationMode>(value, out operationMode);
                         break;
                     case "WorkModes":
                         ParseWorkModes(value);
@@ -227,7 +229,7 @@ namespace ImprovedAI
         /// <summary>
         /// Sets the scheduler operation mode
         /// </summary>
-        public void SetOperationMode(SchedulerOperationMode mode)
+        public void SetOperationMode(OperationMode mode)
         {
             operationMode = mode;
             if (scheduler != null)

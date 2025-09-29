@@ -9,26 +9,14 @@ using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRageMath;
 
+using static ImprovedAI.LogisticsComputer;
+
 namespace ImprovedAI
 {
-    public enum LogisticsState : byte
-    {
-        Initializing,
-        Active,
-        Error
-    }
-
-    public enum LogisticsOperationMode : byte
-    {
-        None = 0,
-        Provider = 1,
-        Requester = 2
-    }
-
     public class IAILogisticsComputer
     {
         private readonly long entityId;
-        private readonly IMyEntity entity;
+        private readonly IMyEntity Entity;
         private readonly MessageQueue messaging;
 
         // Components
@@ -37,8 +25,8 @@ namespace ImprovedAI
         private IMyRadioAntenna primaryAntenna;
 
         // State
-        private LogisticsState currentState = LogisticsState.Initializing;
-        private LogisticsOperationMode operationMode;
+        private State currentState = State.Initializing;
+        private OperationMode operationMode;
         private bool isInitialized = false;
         private long lastUpdateFrame = 0;
         private long lastInventoryScanFrame = 0;
@@ -46,12 +34,12 @@ namespace ImprovedAI
         private long lastPushCheckFrame = 0;
 
         // Cached data
-        private IAIInventory cachedInventory;
+        private Inventory cachedInventory;
         private List<Vector3D> cachedConnectorPositions = new List<Vector3D>();
         private int lastConnectorCount = 0;
 
         // Push configuration (Provider mode)
-        private IAIInventory excessInventory; // Items to push when buffer is full
+        private Inventory excessInventory; // Items to push when buffer is full
         private Dictionary<string, int> bufferLimits; // Max amounts before pushing
         private bool autoPushEnabled = false;
 
@@ -60,35 +48,35 @@ namespace ImprovedAI
         private readonly int INVENTORY_SCAN_INTERVAL_TICKS = 180;
         private readonly int PUSH_CHECK_INTERVAL_TICKS = 300; // Check for excess every 5 seconds
 
-        public IAILogisticsComputer(IMyEntity entity, MessageQueue messaging, LogisticsOperationMode operationMode = LogisticsOperationMode.Provider)
+        public IAILogisticsComputer(IMyEntity entity, MessageQueue messaging,OperationMode operationMode = OperationMode.Provider)
         {
-            this.entity = entity;
+            this.Entity = entity;
             this.entityId = entity.EntityId;
             this.messaging = messaging;
             this.operationMode = operationMode;
-            this.cachedInventory = new IAIInventory();
-            this.excessInventory = new IAIInventory();
+            this.cachedInventory = new Inventory();
+            this.excessInventory = new Inventory();
             this.bufferLimits = new Dictionary<string, int>();
         }
 
         public void Initialize()
         {
-            currentState = LogisticsState.Initializing;
+            currentState = State.Initializing;
             Log.Info("LogisticsComputer {0} initializing in mode: {1}", entityId, operationMode);
 
             if (!CheckCapabilities())
             {
                 Log.Error("LogisticsComputer {0} failed capability check", entityId);
-                currentState = LogisticsState.Error;
+                currentState = State.Error;
                 return;
             }
 
             // All logistics computers register themselves
             // The scheduler needs to know about all of them
-            ScanInventory(forceUpdate: true);
+            ScanCargoContainers(forceUpdate: true);
             SendRegistrationMessage();
 
-            currentState = LogisticsState.Active;
+            currentState = State.Active;
             isInitialized = true;
             Log.Info("LogisticsComputer {0} initialized successfully", entityId);
         }
@@ -110,7 +98,7 @@ namespace ImprovedAI
                     lastUpdateFrame = currentFrame;
                     if (!CheckCapabilities())
                     {
-                        currentState = LogisticsState.Error;
+                        currentState = State.Error;
                         return;
                     }
                 }
@@ -124,11 +112,11 @@ namespace ImprovedAI
                 if (currentFrame - lastInventoryScanFrame >= INVENTORY_SCAN_INTERVAL_TICKS)
                 {
                     lastInventoryScanFrame = currentFrame;
-                    ScanInventory(forceUpdate: false);
+                    ScanCargoContainers(forceUpdate: false);
                 }
 
                 // Provider-specific: Check for excess inventory to push
-                if (operationMode == LogisticsOperationMode.Provider && autoPushEnabled)
+                if (operationMode == OperationMode.Provider && autoPushEnabled)
                 {
                     if (currentFrame - lastPushCheckFrame >= PUSH_CHECK_INTERVAL_TICKS)
                     {
@@ -138,7 +126,7 @@ namespace ImprovedAI
                 }
 
                 // Requester-specific: Periodically check if needs are still unmet
-                if (operationMode == LogisticsOperationMode.Requester)
+                if (operationMode == OperationMode.Requester)
                 {
                     // Requester sends LOGISTIC_REQUEST when it needs items
                     // This is typically triggered by user action or automation logic
@@ -148,13 +136,13 @@ namespace ImprovedAI
             catch (Exception ex)
             {
                 Log.Error("LogisticsComputer {0} update error: {1}", entityId, ex.Message);
-                currentState = LogisticsState.Error;
+                currentState = State.Error;
             }
         }
 
         private bool CheckCapabilities()
         {
-            var cubeBlock = entity as IMyCubeBlock;
+            var cubeBlock = Entity as IMyCubeBlock;
             if (cubeBlock?.CubeGrid == null) return false;
 
             cargoContainers.Clear();
@@ -201,9 +189,9 @@ namespace ImprovedAI
             return cargoContainers.Count > 0 && connectors.Count > 0 && primaryAntenna != null;
         }
 
-        private void ScanInventory(bool forceUpdate)
+        private void ScanCargoContainers(bool forceUpdate)
         {
-            var newInventory = new IAIInventory();
+            var newInventory = new Inventory();
             foreach (var container in cargoContainers)
             {
                 if (!container.IsFunctional || !container.HasInventory) continue;
@@ -231,7 +219,7 @@ namespace ImprovedAI
             }
         }
 
-        private bool HasInventoryChanged(IAIInventory oldInv, IAIInventory newInv)
+        private bool HasInventoryChanged(Inventory oldInv, Inventory newInv)
         {
             if (oldInv.GetItemTypeCount() != newInv.GetItemTypeCount()) return true;
             if (oldInv.GetTotalItemCount() != newInv.GetTotalItemCount()) return true;
@@ -287,7 +275,8 @@ namespace ImprovedAI
                 EntityId = entityId,
                 Inventory = cachedInventory,
                 Connectors = cachedConnectorPositions,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                OperationMode = operationMode
             };
 
             messaging.SendMessage((ushort)MessageTopics.LOGISTIC_REGISTRATION, registration, entityId, requiresAck: false);
@@ -303,7 +292,8 @@ namespace ImprovedAI
                 EntityId = entityId,
                 Inventory = cachedInventory,
                 Connectors = cachedConnectorPositions,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                OperationMode = operationMode
             };
 
             messaging.SendMessage((ushort)MessageTopics.LOGISTIC_UPDATE, update, entityId, requiresAck: false);
@@ -316,7 +306,7 @@ namespace ImprovedAI
         {
             if (bufferLimits.Count == 0) return;
 
-            var itemsToPush = new IAIInventory();
+            var itemsToPush = new Inventory();
             var allItems = cachedInventory.GetAllItems();
 
             foreach (var item in allItems)
@@ -344,25 +334,30 @@ namespace ImprovedAI
         /// Send a LOGISTIC_PUSH message to get rid of unwanted/excess inventory
         /// Scheduler will dispatch a drone to pick it up
         /// </summary>
-        private void SendPushMessage(IAIInventory inventory)
+        private void SendPushMessage(Inventory inventory)
         {
-            var pushRequest = new InventoryProvider
+            // TODO: connector may not be attached to cargo containers, need to fix
+            var connector = connectors[0];
+            var pushRequest = new InventoryRequisition
             {
-                ProviderEntityId = (ushort)(entityId & 0xFFFF),
-                LogisticsGridEntityId = entityId,
-                Inventory = inventory
-            };
+                RequestingEntityId = entityId,
+                Inventory = inventory,
+                ConnectorLocation = connector.GetPosition(),
+                Timestamp = DateTime.UtcNow,
+                RequisitionType = Inventory.RequisitionType.Pull,
+                IsStatic = connector.CubeGrid.IsStatic
+            }; 
 
             messaging.SendMessage((ushort)MessageTopics.LOGISTIC_PUSH, pushRequest, entityId, requiresAck: false);
         }
 
         /// <summary>
-        /// Request specific items from the network
+        /// Request specific items from the network at specific connector.
         /// Scheduler will find a Provider and dispatch a drone to deliver
         /// </summary>
-        public void RequestInventory(IAIInventory requestedInventory)
+        public void RequestInventory(IMyShipConnector connector, Inventory requestedInventory)
         {
-            if (operationMode != LogisticsOperationMode.Requester)
+            if (operationMode != OperationMode.Requester)
             {
                 Log.Warning("LogisticsComputer {0} cannot request inventory - not in Requester mode", entityId);
                 return;
@@ -374,11 +369,14 @@ namespace ImprovedAI
                 return;
             }
 
-            var request = new InventoryRequest
+            var request = new InventoryRequisition
             {
-                RequestingEntityId = (ushort)(entityId & 0xFFFF),
-                LogisticsGridEntityId = entityId,
-                Inventory = requestedInventory
+                RequestingEntityId = entityId,
+                Inventory = requestedInventory,
+                ConnectorLocation = connector.GetPosition(),
+                Timestamp = DateTime.UtcNow,
+                RequisitionType = Inventory.RequisitionType.Pull,
+                IsStatic = connector.CubeGrid.IsStatic
             };
 
             messaging.SendMessage((ushort)MessageTopics.LOGISTIC_REQUEST, request, entityId, requiresAck: false);
@@ -389,9 +387,9 @@ namespace ImprovedAI
         /// <summary>
         /// Manually push specific inventory (even if not excess)
         /// </summary>
-        public void PushInventory(IAIInventory inventoryToPush)
+        public void PushInventory(IMyShipConnector connector ,Inventory inventoryToPush)
         {
-            if (operationMode != LogisticsOperationMode.Provider)
+            if (operationMode != OperationMode.Provider)
             {
                 Log.Warning("LogisticsComputer {0} cannot push inventory - not in Provider mode", entityId);
                 return;
@@ -424,7 +422,7 @@ namespace ImprovedAI
         /// </summary>
         public void SetBufferLimit(string itemSubtypeId, int maxAmount)
         {
-            if (operationMode != LogisticsOperationMode.Provider)
+            if (operationMode != OperationMode.Provider)
             {
                 Log.Warning("LogisticsComputer {0} cannot set buffer limits - not in Provider mode", entityId);
                 return;
@@ -442,7 +440,7 @@ namespace ImprovedAI
 
         public bool IsOperational()
         {
-            return isInitialized && currentState == LogisticsState.Active &&
+            return isInitialized && currentState == State.Active &&
                    cargoContainers.Count > 0 && connectors.Count > 0 &&
                    primaryAntenna != null && primaryAntenna.IsWorking;
         }
@@ -452,7 +450,7 @@ namespace ImprovedAI
             return operationMode;
         }
 
-        public IAIInventory GetCurrentInventory()
+        public Inventory GetCurrentInventory()
         {
             return cachedInventory;
         }

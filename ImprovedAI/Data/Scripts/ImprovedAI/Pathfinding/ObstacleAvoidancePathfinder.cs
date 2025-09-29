@@ -1,4 +1,4 @@
-﻿using BetterAIConstructor.Config;
+﻿using ImprovedAI.Config;
 using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;

@@ -3,13 +3,15 @@ using System;
 
 namespace ImprovedAI.Config
 {
+    [Flags]
     public enum PathfindingMethod
     {
-        Direct = 0,           // Cheapest - straight line
-        ObstacleAvoidance = 1,    // Sensor-based avoidance
-        SimpleRepositioning = 2,  // Dumb repositioning
-        AStar = 3,               // A* pathfinding
-        DStarLite = 4           // Most expensive - D* Lite
+        None = 0,
+        Direct = 1,           // Cheapest - straight line
+        ObstacleAvoidance = 2,    // Sensor-based avoidance
+        SimpleRepositioning = 4,  // Dumb repositioning
+        AStar = 8,               // A* pathfinding
+        DStarLite = 16           // Most expensive - D* Lite
     }
 
     public class PathfindingConfig

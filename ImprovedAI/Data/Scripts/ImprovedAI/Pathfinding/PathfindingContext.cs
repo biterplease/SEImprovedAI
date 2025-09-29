@@ -1,4 +1,4 @@
-﻿using BetterAIConstructor.Interfaces;
+﻿using ImprovedAI.Interfaces;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -10,7 +10,7 @@ namespace ImprovedAI.Pathfinding
 { 
     public class PathfindingContext
     {
-        public BAIController Controller { get; set; }
+        public IMyShipController Controller { get; set; }
         public List<IMySensorBlock> Sensors { get; set; }
         public Vector3D GravityVector { get; set; }
         public double MaxThrust { get; set; }

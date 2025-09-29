@@ -6,31 +6,35 @@ using VRage.Game.ModAPI;
 
 namespace ImprovedAI
 {
-    [ProtoContract]
-    public struct KVPair
-    {
-        [ProtoMember(1)]
-        public string Key;
-        [ProtoMember(2)]
-        public int Value;
-    }
 
-    [Serializable]
-    [ProtoContract]
-    public class IAIInventory
+    [Serializable,ProtoContract(UseProtoMembersOnly = true)]
+    public class Inventory
     {
+        public enum RequisitionType :byte
+        {
+            Push = 1,
+            Pull = 2
+        }
+        [ProtoContract]
+        public struct KVPair
+        {
+            [ProtoMember(1)]
+            public string Key;
+            [ProtoMember(2)]
+            public int Value;
+        }
         [ProtoMember(1)]
         private MyConcurrentList<KVPair> inventory = new MyConcurrentList<KVPair>();
 
         private readonly object _lock = new object();
 
         // Parameterless constructor required for ProtoBuf
-        public IAIInventory()
+        public Inventory()
         {
             inventory = new MyConcurrentList<KVPair>();
         }
 
-        public IAIInventory(Dictionary<string,int> inventory)
+        public Inventory(Dictionary<string,int> inventory)
         {
             this.inventory = new MyConcurrentList<KVPair>();
             foreach (var pair in inventory)
@@ -38,7 +42,7 @@ namespace ImprovedAI
                 this.inventory.Add(new KVPair { Key = pair.Key, Value = pair.Value });
             }
         }
-        public IAIInventory(List<KVPair> inventory)
+        public Inventory(List<KVPair> inventory)
         {
             this.inventory = new MyConcurrentList<KVPair>();
             foreach (var pair in inventory)

@@ -35,8 +35,8 @@ namespace ImprovedAI
         Error
     }
 
-    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_RemoteControl), false, "BetterAIConstructorSmall", "BetterAIConstructorLarge")]
-    public class IAIDroneBlock: MyGameLogicComponent
+    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_RemoteControl), false, "ImprovedAISmallDroneController", "ImprovedAISmallDroneController")]
+    public class IAIDroneControllerBlock: MyGameLogicComponent
     {
         // Core components
         private BAIConstructorDroneConfig config;

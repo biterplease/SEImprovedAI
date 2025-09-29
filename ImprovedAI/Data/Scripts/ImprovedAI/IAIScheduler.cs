@@ -4,6 +4,7 @@ using ImprovedAI.Messages;
 using ImprovedAI.Network;
 using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
+using ProtoBuf;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -15,156 +16,14 @@ using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRageMath;
 using static ImprovedAI.Config.ServerConfig;
+using static ImprovedAI.Scheduler;
 
 namespace ImprovedAI
 {
-    [Flags]
-    public enum SchedulerOperationMode : byte
-    {
-        None = 0,
-        StandAloneDroneScheduler = 1,
-        /// <summary>
-        /// Forward messages to other schedulers.
-        /// </summary>
-        Repeater = 2,
-        /// <summary>
-        /// Standard operation mode. Assign tasks to multiple drones, receive updates from multiple drones.
-        /// </summary>
-        Orchestrator = 4,
-        /// <summary>
-        /// If no drones are available to this scheduler, forward found tasks to other schedulers.
-        /// </summary>
-        DelegateIfNoDrones = 8,
-    }
-    public enum SchedulerState : byte
-    {
-        Initializing,
-        Standby,
-        ScanningForTasks,
-        AssigningTasks,
-        Error
-    }
-    [Flags]
-    public enum SearchModes : byte
-    {
-        ConnectedGrids = 1,
-        BoundingBox = 2
-    }
-    [Flags]
-    public enum WorkModes : ushort
-    {
-        None = 0,
-        Scan = 1,
-        WeldUnfinishedBlocks = 2,
-        RepairDamagedBlocks = 4,
-        WeldProjectedBlocks = 8,
-        Grind = 16,
-        DeliverCargo = 32,
-        FetchCargo = 64,
-        DropCargo = 128,
-        AirDropCargo = 256,
-    }
-
-    [Flags]
-    public enum DroneCapabilities
-    {
-        None = 0,
-        CanWeld = 1,
-        CanGrind = 2,
-        CanDrill = 4,
-        CanAirDrop = 8,
-        HasWheels = 16,
-        CanFlyAtmosphere = 32,
-        CanFlySpace = 64,
-        RefuelWhenDocked = 128,
-        RechargeWhenDocked = 256,
-        CombatReady = 512
-    }
-    public class Drone
-    {
-        public long DroneId { get; set; }
-        public DroneCapabilities Capabilities { get; set; }
-        public DroneState DroneState { get; set; }
-        public float BatteryLevel { get; set; }
-        public float BatteryRechargeThreshold { get; set; }
-        public float BatteryOperationalThreshold { get; set; }
-        public float H2Level { get; set; }
-        public float H2RefuelThreshold { get; set; }
-        public float H2OperationalThreshold { get; set; }
-        public bool IsOutOfRange { get; set; }
-        public DateTime LastSeenTime { get; set; }
-        public DateTime LastReportTime { get; set; }
-        public Drone()
-        {
-            Capabilities = DroneCapabilities.None;
-            DroneState = DroneState.Standby;
-            BatteryLevel = 25.0f;
-            BatteryRechargeThreshold = 20.0f;
-            BatteryOperationalThreshold = 80.0f;
-            H2Level = 25.0f;
-            H2RefuelThreshold = 20.0f;
-            H2OperationalThreshold = 80.0f;
-            IsOutOfRange = false;
-            LastSeenTime = DateTime.UtcNow;
-            LastReportTime = DateTime.UtcNow;
-        }
-        public Drone(
-            long droneId,
-            DroneCapabilities capabilities = DroneCapabilities.None,
-            DroneState droneState = DroneState.Standby,
-            float batteryLevel = 25.0f,
-            float batteryRechargeThreshold = 20.0f,
-            float batteryOperationalThreshold = 80.0f,
-            float h2Level = 25.0f,
-            float h2RechargeThreshold = 20.0f,
-            float h2OperationalThreshold = 80.0f,
-            bool isOutOfRange = false
-            )
-        {
-            DroneId = droneId;
-            Capabilities = capabilities;
-            DroneState = droneState;
-            BatteryLevel = batteryLevel;
-            BatteryRechargeThreshold = batteryRechargeThreshold;
-            BatteryOperationalThreshold = batteryOperationalThreshold;
-            H2Level = h2Level;
-            H2RefuelThreshold = h2RechargeThreshold;
-            H2OperationalThreshold = h2OperationalThreshold;
-            IsOutOfRange = isOutOfRange;
-            LastSeenTime = DateTime.UtcNow;
-            LastReportTime = DateTime.UtcNow;
-        }
-        public Drone(Drone drone)
-        {
-            DroneId = drone.DroneId;
-            Capabilities = drone.Capabilities;
-            DroneState = drone.DroneState;
-            BatteryLevel = drone.BatteryLevel;
-            BatteryRechargeThreshold = drone.BatteryRechargeThreshold;
-            BatteryOperationalThreshold = drone.BatteryOperationalThreshold;
-            H2Level = drone.H2Level;
-            H2RefuelThreshold = drone.H2RefuelThreshold;
-            H2OperationalThreshold = drone.H2OperationalThreshold;
-            IsOutOfRange = drone.IsOutOfRange;
-            LastReportTime = drone.LastReportTime;
-            LastSeenTime = drone.LastSeenTime;
-        }
-    }
-
-    public struct LogisticsGrid
-    {
-        public long GridId;
-        public LogisticsOperationMode OperationMode;
-        /// <summary>
-        /// Positions of available connectors.
-        /// </summary>
-        public Vector3D connectors;
-        public IAIInventory LastKnownInventory;
-    }
     public class IAIScheduler
     {
         private MyConcurrentDictionary<long, Drone> registeredDrones = new MyConcurrentDictionary<long, Drone>();
-        private MyConcurrentDictionary<long, LogisticsGrid> registeredLogisticsGrids = new MyConcurrentDictionary<long, LogisticsGrid>();
+        private MyConcurrentDictionary<long, LogisticsComputer> registeredLogisticsComputers = new MyConcurrentDictionary<long, LogisticsComputer>();
         /// <summary>
         /// Queue of discovered, but yet unassigned tasks.
         /// </summary>
@@ -178,7 +37,7 @@ namespace ImprovedAI
         /// this scheduler can safely remove the task, as it has been picked up by a different scheduler.
         /// </summary>
         private MyConcurrentDictionary<ushort, uint> delegatedTasksNeedingAck = new MyConcurrentDictionary<ushort, uint>();
-        public SchedulerState currentState { get; private set; }
+        public State currentState { get; private set; }
 
 
         private static Dictionary<long, AntennaInfo> antennaCache = new Dictionary<long, AntennaInfo>();
@@ -240,7 +99,7 @@ namespace ImprovedAI
 
         // block settings
         public bool isEnabled { get; set; }
-        public SchedulerOperationMode operationMode;
+        public OperationMode operationMode;
         public WorkModes workModes;
         private bool ignoreTasksOutsideSpecifiedRange = false;
         private float ignoreTasksOutsideSpecifiedRangeMeters = 1000.0f;
@@ -263,7 +122,7 @@ namespace ImprovedAI
 
         public IAIScheduler(
             IMyEntity entity,
-            SchedulerOperationMode operationMode = SchedulerOperationMode.Orchestrator,
+            OperationMode operationMode = OperationMode.Orchestrator,
             WorkModes workModes = WorkModes.None)
         {
             this.entityId = entity.EntityId;
@@ -305,12 +164,12 @@ namespace ImprovedAI
         public void UpdateBeforeSimulation10(MyGameLogicComponent _base)
         {
             _base.UpdateBeforeSimulation10();
-            if (!AntennaOK() && currentState != SchedulerState.Error && _initialized)
+            if (!AntennaOK() && currentState != State.Error && _initialized)
             {
                 Log.Warning("Scheduler {0} antenna check failed, transitioning to error state", entityId);
-                currentState = SchedulerState.Error;
+                currentState = State.Error;
             }
-            if (!_initialized && currentState != SchedulerState.Initializing)
+            if (!_initialized && currentState != State.Initializing)
             {
                 Initialize();
                 return;
@@ -327,7 +186,7 @@ namespace ImprovedAI
             {
                 UpdateAI();
 
-                if (currentState != SchedulerState.Error && currentState != SchedulerState.Initializing)
+                if (currentState != State.Error && currentState != State.Initializing)
                 {
                     ReadDroneRegistrations();
                     ReadDroneReports((ushort)messageReadLimit);
@@ -336,7 +195,7 @@ namespace ImprovedAI
             catch (Exception ex)
             {
                 Log.Error("Scheduler {0} update threw exception: {1}", entityId, ex.Message);
-                currentState = SchedulerState.Error;
+                currentState = State.Error;
             }
         }
 
@@ -344,15 +203,15 @@ namespace ImprovedAI
         {
             switch (currentState)
             {
-                case SchedulerState.Initializing:
+                case State.Initializing:
                     return _initializingUpdateIntervalTicks;
-                case SchedulerState.Error:
+                case State.Error:
                     return _errorUpdateIntervalTicks;
-                case SchedulerState.Standby:
+                case State.Standby:
                     return _standbyUpdateIntervalTicks;
-                case SchedulerState.ScanningForTasks:
+                case State.ScanningForTasks:
                     return _scanningUpdateIntervalTicks;
-                case SchedulerState.AssigningTasks:
+                case State.AssigningTasks:
                     return _assigningUpdateIntervalTicks;
                 default:
                     return 600; // Default 10 second updates
@@ -362,7 +221,7 @@ namespace ImprovedAI
         private void Initialize()
         {
             messaging = IAISession.Instance.MessageQueue;
-            currentState = SchedulerState.Initializing;
+            currentState = State.Initializing;
             long schedulerId = this.entityId;
 
             foreach (var topic in DroneManagementTopics)
@@ -378,20 +237,6 @@ namespace ImprovedAI
             messaging.Subscribe(entityId, (ushort)MessageTopics.SCHEDULER_FORWARD);
         }
 
-        public enum SchedulerState
-        {
-            Initializing,
-            Standby,
-            /// <summary>
-            /// Finds tasks in connected grids.
-            /// </summary>
-            ScanningForTasks,
-            /// <summary>
-            ///  Sends messages to drones and other schedulers.
-            /// </summary>
-            AssigningTasks,
-            Error
-        }
         private void UpdateAI()
         {
             var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
@@ -404,19 +249,19 @@ namespace ImprovedAI
             }
             switch (currentState)
             {
-                case SchedulerState.Initializing:
+                case State.Initializing:
                     HandleInitializing();
                     break;
-                case SchedulerState.Standby:
+                case State.Standby:
                     HandleStandby();
                     break;
-                case SchedulerState.ScanningForTasks:
+                case State.ScanningForTasks:
                     HandleScanningForTasks();
                     break;
-                case SchedulerState.AssigningTasks:
+                case State.AssigningTasks:
                     HandleTaskAssignment();
                     break;
-                case SchedulerState.Error:
+                case State.Error:
                     HandleError();
                     break;
             }
@@ -428,13 +273,13 @@ namespace ImprovedAI
                 if (AntennaOK())
                 {
                     UpdateAntennaCache(ownAntenna);
-                    currentState = SchedulerState.Standby;
+                    currentState = State.Standby;
                     _initialized = true;
                 }
             }
             else
             {
-                currentState = SchedulerState.Error;
+                currentState = State.Error;
             }
         }
 
@@ -450,7 +295,7 @@ namespace ImprovedAI
                 if (ShouldStartScanning())
                 {
                     Log.Verbose("Scheduler {0} waking from standby to scan for tasks", entityId);
-                    currentState = SchedulerState.ScanningForTasks;
+                    currentState = State.ScanningForTasks;
                 }
             }
         }
@@ -525,25 +370,25 @@ namespace ImprovedAI
             catch (Exception ex)
             {
                 Log.Error("Scheduler {0} Error during task scanning: {1}", entityId, ex.Message);
-                currentState = SchedulerState.Error;
+                currentState = State.Error;
                 return;
             }
 
             if (totalTasks == 0)
             {
                 Log.Verbose("Scheduler {0] going on standby, no tasks found.", entityId);
-                currentState = SchedulerState.Standby;
+                currentState = State.Standby;
                 return;
             }
             Log.Verbose("Scheduler {0} found {1} tasks, transitioning to AssigningTasks", entityId, totalTasks);
-            currentState = SchedulerState.AssigningTasks;
+            currentState = State.AssigningTasks;
         }
 
         private void HandleTaskAssignment()
         {
             int assigned = 0;
             // scheduler set to only repeater task messages
-            if (operationMode.Equals(SchedulerOperationMode.Repeater))
+            if (operationMode.Equals(OperationMode.Repeater))
             {
                 Task task;
                 while (taskQueue.TryDequeue(out task))
@@ -552,11 +397,11 @@ namespace ImprovedAI
                     messaging.SendMessage((ushort)MessageTopics.SCHEDULER_FORWARD, task, entityId, needsAck);
                 }
             }
-            if (registeredDrones.Count != 0 && operationMode.HasFlag(SchedulerOperationMode.Orchestrator))
+            if (registeredDrones.Count != 0 && operationMode.HasFlag(OperationMode.Orchestrator))
             {
             }
             // no registered drones
-            if (registeredDrones.Count == 0 && operationMode.HasFlag(SchedulerOperationMode.DelegateIfNoDrones))
+            if (registeredDrones.Count == 0 && operationMode.HasFlag(OperationMode.DelegateIfNoDrones))
             {
                 for (int i = 0; i < _maxTasksAssignedPerBatch; i++)
                 {
@@ -579,7 +424,7 @@ namespace ImprovedAI
                     }
                 }
             }
-            if (registeredDrones.Count == 0 && !operationMode.HasFlag(SchedulerOperationMode.DelegateIfNoDrones))
+            if (registeredDrones.Count == 0 && !operationMode.HasFlag(OperationMode.DelegateIfNoDrones))
                 Log.Info("Scheduler {0}: No available drones", entityId);
             return;
 
@@ -712,7 +557,7 @@ namespace ImprovedAI
                         {
                             TaskId = _idGenerator.GenerateId(),
                             TaskType = TaskType.PreciseWelding,
-                            Payload = new IAIInventory(componentsDict),
+                            Payload = new Inventory(componentsDict),
                             Position = blockPosition,
                             OutOfSchedulerRange = isOutOfAntennaRange
                         });
@@ -750,8 +595,8 @@ namespace ImprovedAI
                 }
                 drone = new Drone(
                     reg.DroneEntityId,
-                    reg.Capabilities.GetValueOrDefault(DroneCapabilities.None), // if this drone reported without capabilities, its probably unusable
-                    reg.DroneState.GetValueOrDefault(DroneState.Standby),
+                    reg.Capabilities.GetValueOrDefault(Drone.Capabilities.None), // if this drone reported without capabilities, its probably unusable
+                    reg.DroneState.GetValueOrDefault(Drone.State.Standby),
                     reg.BatteryChargePercent.GetValueOrDefault(100.0f),
                     reg.BatteryRechargeThreshold.GetValueOrDefault(25.0f),
                     reg.BatteryOperationalThreshold.GetValueOrDefault(80.0f),
@@ -771,33 +616,33 @@ namespace ImprovedAI
                 Drone drone;
                 if (registeredDrones.TryGetValue(report.DroneEntityId, out drone))
                 {
-                    if (report.Flags.HasFlag(DroneUpdateFlags.StateChanged))
-                        drone.DroneState = report.DroneState.GetValueOrDefault(drone.DroneState);
-                    if (report.Flags.HasFlag(DroneUpdateFlags.CapabilitiesChanged))
-                        drone.Capabilities = report.Capabilities.GetValueOrDefault(drone.Capabilities);
-                    if (report.Flags.HasFlag(DroneUpdateFlags.BatteryUpdate))
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.StateChanged))
+                        drone._State = report.DroneState.GetValueOrDefault(drone._State);
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.CapabilitiesChanged))
+                        drone._Capabilities = report.Capabilities.GetValueOrDefault(drone._Capabilities);
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.BatteryUpdate))
                     {
                         drone.BatteryLevel = report.BatteryChargePercent.GetValueOrDefault(drone.BatteryLevel);
                         drone.BatteryRechargeThreshold = report.BatteryRechargeThreshold.GetValueOrDefault(drone.BatteryRechargeThreshold);
                         drone.BatteryOperationalThreshold = report.BatteryOperationalThreshold.GetValueOrDefault(drone.BatteryOperationalThreshold);
                     }
-                    if (report.Flags.HasFlag(DroneUpdateFlags.H2Update))
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.H2Update))
                     {
                         drone.H2Level = report.H2Level.GetValueOrDefault(drone.H2Level);
                         drone.H2RefuelThreshold = report.H2RefuelThreshold.GetValueOrDefault(drone.H2RefuelThreshold);
                         drone.H2OperationalThreshold = report.H2OperationalThreshold.GetValueOrDefault(drone.H2OperationalThreshold);
                     }
-                    if (report.Flags.HasFlag(DroneUpdateFlags.TaskComplete))
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.TaskComplete))
                         HandleTaskCompletion(report.DroneEntityId, report.TaskId.Value);
                     // GoingOutOfRange unregisters, must be evaluated last
-                    if (report.Flags.HasFlag(DroneUpdateFlags.GoingOutOfRange))
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.GoingOutOfRange))
                     {
                         drone.IsOutOfRange = true;
                         drone.LastSeenTime = DateTime.UtcNow;
                         Log.LogDroneNetwork("AI scheduler {0}: Drone {1} going out of range",
                             entityId, report.DroneEntityId);
                     }
-                    if (report.Flags.HasFlag(DroneUpdateFlags.ReturningIntoRange))
+                    if (report.Flags.HasFlag(Drone.UpdateFlags.ReturningIntoRange))
                     {
                         drone.IsOutOfRange = false;
                         drone.LastSeenTime = DateTime.UtcNow;
@@ -926,13 +771,13 @@ namespace ImprovedAI
             }
 
             registeredDrones.Clear();
-            registeredLogisticsGrids.Clear();
+            registeredLogisticsComputers.Clear();
 
             _consecutiveErrors = 0;
             _initialized = false;
             isEnabled = false;
 
-            currentState = SchedulerState.Initializing;
+            currentState = State.Initializing;
 
             Log.Info("Scheduler {0} reset complete", entityId);
         }
@@ -1012,7 +857,7 @@ namespace ImprovedAI
                 {
                     // Successfully recovered
                     _consecutiveErrors = 0;
-                    currentState = SchedulerState.Standby;
+                    currentState = Scheduler.State.Standby;
 
                     Log.Info("Scheduler {0} successfully recovered from error state", entityId);
 

@@ -2,33 +2,14 @@
 using VRage.Game.ModAPI.Ingame.Utilities;
 using VRageMath;
 
-namespace ImprovedAI.BlockConfig
+namespace ImprovedAI
 {
-    public enum DroneOperationMode
-    {
-        StandAlone,
-        ManagedByScheduler,
-        ManagedByPlayer,
-    }
-    public enum DroneState
-    {
-        Initializing,
-        Standby,
-        NavigatingToTarget,
-        LoadingInventory,
-        Welding,
-        Grinding,
-        ReturningToBase,
-        Docking,
-        RefuelingHydrogen,
-        RechargingBattery,
-        Error
-    }
 
-    public class IAIDroneConfig
+
+    public class IAIDroneControllerBlockSettings
     {
         // Configuration values
-        public DroneOperationMode OperationMode { get; set; } = DroneOperationMode.StandAlone;
+        public Drone.OperationMode OperationMode { get; set; } = Drone.OperationMode.StandAlone;
         public float WaypointTolerance { get; set; } = 5.0f;
         public float MaxApproachSpeed { get; set; } = 5.0f;
         public float MaxTravelSpeed { get; set; } = 50.0f;
@@ -65,7 +46,7 @@ namespace ImprovedAI.BlockConfig
 
         public void ResetToDefaults()
         {
-            OperationMode = DroneOperationMode.StandAlone;
+            OperationMode = Drone.OperationMode.StandAlone;
             WaypointTolerance = 2.5f;
             MaxApproachSpeed = 5.0f;
             DockingSpeed = 5.0f;

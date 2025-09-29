@@ -1,4 +1,4 @@
-﻿using BetterAIConstructor.Config;
+﻿using ImprovedAI.Config;
 using System.Collections.Generic;
 using VRageMath;
 
