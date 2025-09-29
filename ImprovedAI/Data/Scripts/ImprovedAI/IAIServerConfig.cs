@@ -69,42 +69,23 @@ namespace ImprovedAI.Config
             public static int MaxRepositionAttempts { get; private set; } = 10;
             public static double RepositionStep { get; private set; } = 10.0;
             public static double MinAltitudeBuffer { get; private set; } = 20.0;
+            public static int MaxPathNodes { get; private set; } = 1000;
+            public static TimeSpan MaxPathfindingTime { get; private set; } = TimeSpan.FromMilliseconds(50);
         }
 
-        // Performance
-        public static int MaxPathNodes { get; private set; } = 1000;
-        public static TimeSpan MaxPathfindingTime { get; private set; } = TimeSpan.FromMilliseconds(50);
-        public static int AIUpdateInterval { get; private set; } = 10;
-        public static int PowerCheckInterval { get; private set; } = 300;
-        public static int BroadcastInterval { get; private set; } = 600;
-
-        // Construction
-        public static int MaxBlocksPerScan { get; private set; } = 50;
-        public static int MaxTargetBlocks { get; private set; } = 20;
-        public static double DefaultConstructionRange { get; private set; } = 100.0;
-        public static double MaxConstructionRange { get; private set; } = 500.0;
 
         // Safety
-        public static bool EnableSafetyLimits { get; private set; } = true;
-        public static float MaxThrustOverride { get; private set; } = 1.0f;
-        public static float MaxGyroOverride { get; private set; } = 1.0f;
-        public static bool RequireConnector { get; private set; } = true;
-        public static bool RequireWelderForWelding { get; private set; } = true;
-        public static bool RequireGrinderForGrinding { get; private set; } = true;
-        public static bool EnableEmergencyStop { get; private set; } = true;
-        public static int MaxConsecutiveErrors { get; private set; } = 3;
-
         // Power
         public static class Drone
         {
-        public static bool DefaultMonitorHydrogen { get; private set; } = false;
-        public static bool DefaultMonitorBattery { get; private set; } = false;
-        public static float DefaultHydrogenRefuelThreshold { get; private set; } = 25.0f;
-        public static float DefaultHydrogenOperationalThreshold { get; private set; } = 50.0f;
-        public static float DefaultBatteryRefuelThreshold { get; private set; } = 20.0f;
-        public static float DefaultBatteryOperationalThreshold { get; private set; } = 40.0f;
-        public static float MinPowerThreshold { get; private set; } = 5.0f;
-        public static float MaxPowerThreshold { get; private set; } = 95.0f;
+            public static bool DefaultMonitorHydrogen { get; private set; } = false;
+            public static bool DefaultMonitorBattery { get; private set; } = false;
+            public static float DefaultHydrogenRefuelThreshold { get; private set; } = 25.0f;
+            public static float DefaultHydrogenOperationalThreshold { get; private set; } = 50.0f;
+            public static float DefaultBatteryRefuelThreshold { get; private set; } = 20.0f;
+            public static float DefaultBatteryOperationalThreshold { get; private set; } = 40.0f;
+            public static float MinPowerThreshold { get; private set; } = 5.0f;
+            public static float MaxPowerThreshold { get; private set; } = 95.0f;
         }
 
         public static class SchedulerBounds
@@ -181,10 +162,6 @@ namespace ImprovedAI.Config
             public static bool LogDroneOrders { get; private set; } = true;
         }
 
-        // Compatibility
-        public static bool CompatibilityMode { get; private set; } = false;
-        public static bool SkipVersionChecks { get; private set; } = false;
-        public static bool AllowLegacyConfig { get; private set; } = true;
 
         public static void LoadConfig()
         {
@@ -378,7 +355,7 @@ namespace ImprovedAI.Config
 
         public static bool CanFactionCreateScheduler(long factionId)
         {
-            if (BlockLimits.MaxSchedulersPerFaction<= 0) return true;
+            if (BlockLimits.MaxSchedulersPerFaction <= 0) return true;
 
             int factionConstructorCount = 0;
             if (IAISession.Instance?.AIDroneSchedulers != null)
@@ -387,7 +364,7 @@ namespace ImprovedAI.Config
                 {
                     var slim = (IMySlimBlock)constructor;
                     var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(slim.OwnerId);
-                    
+
                     if (faction?.FactionId == factionId)
                         factionConstructorCount++;
                 }
