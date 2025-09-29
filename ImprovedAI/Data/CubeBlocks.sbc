@@ -1,0 +1,140 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+	<CubeBlocks>
+
+		<!-- Small Grid AI Constructor -->
+		<Definition xsi:type="MyObjectBuilder_RemoteControlDefinition">
+			<Id>
+				<TypeId>RemoteControl</TypeId>
+				<SubtypeId>ImprovedAISmallDroneControl</SubtypeId>
+			</Id>
+			<DisplayName>AI Constructor (Small)</DisplayName>
+			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
+			<Icon>Textures\GUI\Icons\Cubes\RemoteControl.dds</Icon>
+			<CubeSize>Small</CubeSize>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="1" y="1" z="1" />
+			<ModelOffset x="0" y="0" z="0" />
+			<Model>Models\Cubes\Small\RemoteControl.mwm</Model>
+			<Components>
+				<Component Subtype="SteelPlate" Count="5" />
+				<Component Subtype="Construction" Count="5" />
+				<Component Subtype="Motor" Count="1" />
+				<Component Subtype="Computer" Count="15" />
+				<Component Subtype="SteelPlate" Count="5" />
+			</Components>
+			<CriticalComponent Subtype="Computer" Index="0" />
+			<MountPoints>
+				<MountPoint Side="Bottom" StartX="0.1" StartY="0.1" EndX="0.9" EndY="0.9" />
+			</MountPoints>
+			<BuildProgressModels>
+				<Model BuildPercentUpperBound="0.50" File="Models\Cubes\Small\RemoteControlConstruction_1.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Small\RemoteControlConstruction_2.mwm" />
+			</BuildProgressModels>
+			<BlockPairName>BetterAI_Constructor</BlockPairName>
+			<MirroringY>Z</MirroringY>
+			<MirroringZ>Y</MirroringZ>
+			<EdgeType>Light</EdgeType>
+			<BuildTimeSeconds>20</BuildTimeSeconds>
+			<EnableFirstPerson>true</EnableFirstPerson>
+			<EnableShipControl>true</EnableShipControl>
+			<EnableBuilderCockpit>false</EnableBuilderCockpit>
+			<PCU>25</PCU>
+			<IsAirTight>false</IsAirTight>
+		</Definition>
+
+		<!-- Large Grid AI Constructor -->
+		<Definition xsi:type="MyObjectBuilder_RemoteControlDefinition">
+			<Id>
+				<TypeId>RemoteControl</TypeId>
+				<SubtypeId>ImprovedAILargeDroneControl</SubtypeId>
+			</Id>
+			<DisplayName>AI Constructor (Large)</DisplayName>
+			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
+			<Icon>Textures\GUI\Icons\Cubes\RemoteControl.dds</Icon>
+			<CubeSize>Large</CubeSize>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="1" y="1" z="1" />
+			<ModelOffset x="0" y="0" z="0" />
+			<Model>Models\Cubes\Large\RemoteControl.mwm</Model>
+			<Components>
+				<Component Subtype="SteelPlate" Count="10" />
+				<Component Subtype="Construction" Count="10" />
+				<Component Subtype="Motor" Count="1" />
+				<Component Subtype="Computer" Count="15" />
+				<Component Subtype="SteelPlate" Count="5" />
+			</Components>
+			<CriticalComponent Subtype="Computer" Index="0" />
+			<MountPoints>
+				<MountPoint Side="Bottom" StartX="0.1" StartY="0.1" EndX="0.9" EndY="0.9" />
+			</MountPoints>
+			<BuildProgressModels>
+				<Model BuildPercentUpperBound="0.50" File="Models\Cubes\Large\RemoteControlConstruction_1.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\RemoteControlConstruction_2.mwm" />
+			</BuildProgressModels>
+			<BlockPairName>BetterAI_Constructor</BlockPairName>
+			<MirroringY>Z</MirroringY>
+			<MirroringZ>Y</MirroringZ>
+			<EdgeType>Light</EdgeType>
+			<BuildTimeSeconds>40</BuildTimeSeconds>
+			<EnableFirstPerson>true</EnableFirstPerson>
+			<EnableShipControl>true</EnableShipControl>
+			<EnableBuilderCockpit>false</EnableBuilderCockpit>
+			<PCU>25</PCU>
+			<IsAirTight>false</IsAirTight>
+		</Definition>
+		<Definition xsi:type="MyObjectBuilder_BroadcastControllerDefinition">
+			<Id>
+				<TypeId>BroadcastController</TypeId>
+				<SubtypeId>ImprovedAILargeScheduler</SubtypeId>
+			</Id>
+			<DisplayName>DisplayName_Block_BroadcastController</DisplayName>
+			<Icon>Textures\GUI\Icons\Cubes\Broadcast.dds</Icon>
+			<Description>Description_BroadcastController</Description>
+			<CubeSize>Large</CubeSize>
+			<GuiVisible>false</GuiVisible>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="1" y="1" z="1" />
+			<ModelOffset x="0" y="0" z="0" />
+			<Model>Models\Cubes\Large\Broadcast.mwm</Model>
+			<PlaceDecals>false</PlaceDecals>
+			<Components>
+				<Component Subtype="InteriorPlate" Count="500" />
+				<Component Subtype="Construction" Count="500" />
+				<Component Subtype="RadioCommunication" Count="200" />
+				<Component Subtype="Computer" Count="2000" />
+				<Component Subtype="Display" Count="100" />
+				<Component Subtype="Construction" Count="500" />
+			</Components>
+			<CriticalComponent Subtype="Computer" Index="0" />
+			<MountPoints>
+				<MountPoint Side="Bottom" StartX="0" StartY="0" EndX="1" EndY="1" Default="true" />
+				<MountPoint Side="Top" StartX="0" StartY="0.5" EndX="1" EndY="1" />
+				<MountPoint Side="Left" StartX="0" StartY="0" EndX="1" EndY="0.6" />
+				<MountPoint Side="Left" StartX="0" StartY="0.6" EndX="0.5" EndY="1" />
+				<MountPoint Side="Right" StartX="0" StartY="0" EndX="1" EndY="0.8" />
+				<MountPoint Side="Right" StartX="0.5" StartY="0.8" EndX="1" EndY="1" />
+				<MountPoint Side="Back" StartX="0" StartY="0" EndX="1" EndY="0.6" />
+				<MountPoint Side="Front" StartX="0" StartY="0" EndX="1" EndY="1" />
+			</MountPoints>
+			<BuildProgressModels>
+				<Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\BroadcastConstruction1.mwm" />
+				<Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\BroadcastConstruction2.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\BroadcastConstruction3.mwm" />
+			</BuildProgressModels>
+			<BlockPairName>BroadcastController</BlockPairName>
+			<EdgeType>Light</EdgeType>
+			<BuildTimeSeconds>60</BuildTimeSeconds>
+			<MirroringY>Z</MirroringY>
+			<MirroringZ>Y</MirroringZ>
+			<DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
+			<DamagedSound>ParticleElectrical</DamagedSound>
+			<ResourceSinkGroup>Utility</ResourceSinkGroup>
+			<RequiredPowerInput>1000.0</RequiredPowerInput>
+			<EmissiveColorPreset>Extended</EmissiveColorPreset>
+			<DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>
+			<DestroySound>WepSmallWarheadExpl</DestroySound>
+			<PCU>25</PCU>
+		</Definition>
+	</CubeBlocks>
+</Definitions>
