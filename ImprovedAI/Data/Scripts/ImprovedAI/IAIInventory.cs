@@ -30,6 +30,14 @@ namespace ImprovedAI
             inventory = new MyConcurrentList<KVPair>();
         }
 
+        public IAIInventory(Dictionary<string,int> inventory)
+        {
+            this.inventory = new MyConcurrentList<KVPair>();
+            foreach (var pair in inventory)
+            {
+                this.inventory.Add(new KVPair { Key = pair.Key, Value = pair.Value });
+            }
+        }
         public IAIInventory(List<KVPair> inventory)
         {
             this.inventory = new MyConcurrentList<KVPair>();

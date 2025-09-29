@@ -1,3 +1,4 @@
+using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
 using System;
@@ -21,7 +22,7 @@ namespace ImprovedAI.Config
     /// <summary>
     /// Serialization mode for the message queue
     /// </summary>
-    public enum MessageSerializationMode
+    public enum MessageSerializationMode : byte
     {
         /// <summary>
         /// XML serialization is slow, but good for debugging.
@@ -104,10 +105,34 @@ namespace ImprovedAI.Config
         {
             public static int MaxTargetLimit { get; private set; } = 100;
             public static int PerScanLimit { get; private set; } = 100;
+            public static int MaxTaskAssignmentPerBatch { get; private set; } = 10;
             /// <summary>
             /// Power usage for scheduler in Watts. Default 1MW (1,000,000 W).
             /// </summary>
             public static float SchedulerPowerUsage { get; private set; } = 1000000.0f;
+            /// <summary>
+            /// Update intervals different for every state
+            /// </summary>
+            public static class StateUpdateIntervalTicks
+            {
+
+                public static int Initializing { get; private set; } = 600;
+                public static int Error { get; private set; } = 600;
+                public static int Standby { get; private set; } = 600;
+                public static int Scanning { get; private set; } = 60;
+                public static int Assigning { get; private set; } = 60;
+            }
+            /// <summary>
+            /// When on standby, wait ScanDelayTicks before scanning again.
+            /// </summary>
+            public static int ScanDelayTicks = 600;
+            public static int ErrorRecoveryIntervalTicks = 300;
+            public static int MaxConsecutiveErrors = 3;
+            /// <summary>
+            /// The scheduler will perform a cleanup of orphaned drones that are no longer in its range.
+            /// For whatever reason. Default is 5 minutes.
+            /// </summary>
+            public static int ManintenanceIntervalTicks = 300; // 30 seconds
         }
         /// <summary>
         /// This section is about the Drone network communication.

@@ -7,19 +7,28 @@ using VRage.Collections;
 using VRage.Utils;
 using System.Text;
 using ImprovedAI.Utils;
+using ProtoBuf;
 
 namespace ImprovedAI.Network
 {
     public class MessageQueue
     {
-        private struct TimestampedMessage
+        [Serializable,ProtoContract]
+        private class TimestampedMessage
         {
+
+            [ProtoMember(1)]
             public byte[] Data;
+            [ProtoMember(2)]
             public DateTime Timestamp;
+            [ProtoMember(3)]
             public long SenderId;
+            [ProtoMember(4)]
             public ushort MessageId;
-            public bool RequiresAck;
+            [ProtoMember(5)]
             public MessageSerializationMode SerializationMode;
+            [ProtoMember(6)]
+            public bool RequiresAck;
         }
 
         // Configuration

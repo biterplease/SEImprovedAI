@@ -21,6 +21,7 @@ namespace ImprovedAI.Messages
         LOGISTIC_UPDATE,
         LOGISTIC_REQUEST,
         LOGISTIC_PUSH,
+        SCHEDULER_FORWARD,
     }
 
     [ProtoContract]
@@ -95,19 +96,49 @@ namespace ImprovedAI.Messages
         BecomeStandAlone,
     }
     [Serializable,ProtoContract(UseProtoMembersOnly = true)]
-    public struct Task
+    public class Task
     {
+        /// <summary>
+        /// Payload required for the task, if any.
+        /// </summary>
         [ProtoMember(1)]
-        public IAIInventory Payload;
+        public IAIInventory Payload { get; set; }
         [ProtoMember(2)]
-        public Vector3D Position;
+        public Vector3D Position { get; set; }
+        /// <summary>
+        /// Scheduler that assigned the task.
+        /// </summary>
         [ProtoMember(3)]
-        public ushort TaskId;
+        public long AssignedBy;
         [ProtoMember(4)]
-        public TaskType TaskType;
+        public DateTime AssignedTime { get; set; }
+        [ProtoMember(5)]
+        public DateTime CreatedTime { get; set; }
+        [ProtoMember(6)]
+        public uint TaskId { get; set; }
+        [ProtoMember(7)]
+        public TaskType TaskType { get; set; }
+        /// <summary>
+        /// Is this task out of scheduler antenna range.
+        /// </summary>
+        [ProtoMember(8)]
+        public bool OutOfSchedulerRange { get; set; }
+        public Task() { }
+
+        public Task(IAIInventory payload, Vector3D position, long assignedBy, DateTime assignedTime, ushort taskId, TaskType taskType, bool outOfSchedulerRange)
+        {
+            TaskId = taskId;
+            Payload = payload;
+            Position = position;
+            AssignedBy = assignedBy;
+            AssignedTime = assignedTime;
+            CreatedTime = DateTime.UtcNow;
+            TaskType = taskType;
+            OutOfSchedulerRange = outOfSchedulerRange;
+        }
     }
     [ProtoContract,Flags]
-    public enum DroneUpdateFlags : byte
+    public enum DroneUpdateFlags : ushort
     {
         [ProtoEnum]
         None = 0,
@@ -127,6 +158,10 @@ namespace ImprovedAI.Messages
         H2Update = 64,
         [ProtoEnum]
         GoingOutOfRange = 128,
+        [ProtoEnum]
+        ReturningIntoRange = 256,
+        [ProtoEnum]
+        UnderAttack = 512,
     }
 
     /// <summary>
@@ -139,7 +174,6 @@ namespace ImprovedAI.Messages
         public long DroneEntityId;
         [ProtoMember(2)]
         public DroneUpdateFlags Flags;
-
         [ProtoMember(3)]
         public DroneState? DroneState;
         [ProtoMember(4)]
@@ -172,7 +206,7 @@ namespace ImprovedAI.Messages
     }
 
     [ProtoContract]
-    public struct InventoryProvider
+    public class InventoryProvider
     {
         [ProtoMember(1)]
         public IAIInventory Inventory;
@@ -203,13 +237,15 @@ namespace ImprovedAI.Messages
         LogisticsGrid = 2,
     }
     [ProtoContract]
-    public class RegisterLogistics
+    public class LogisticsUpdate
     {
         [ProtoMember(1)]
         public IAIInventory Inventory;
         [ProtoMember(2)]
         public List<Vector3D> Connectors;
         [ProtoMember(3)]
-        public ushort EntityId;
+        public DateTime Timestamp;
+        [ProtoMember(4)]
+        public long EntityId;
     }
 }

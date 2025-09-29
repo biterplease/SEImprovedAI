@@ -43,6 +43,8 @@ namespace ImprovedAI
         private bool capabilitiesValid = false;
         private int tickCounter = 0;
 
+        private bool _isInit = false;
+
         // Component references
         private IMyRadioAntenna antenna;
 
@@ -54,8 +56,11 @@ namespace ImprovedAI
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
+            Log.Info("Initializing {0}", Log.BlockName(Entity));
             // This method is called async! Use UpdateOnceBeforeFrame for proper initialization
-            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+            base.Init(objectBuilder);
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+
         }
 
         public override void UpdateOnceBeforeFrame()
