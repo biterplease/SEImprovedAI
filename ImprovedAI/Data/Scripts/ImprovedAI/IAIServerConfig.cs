@@ -94,10 +94,6 @@ namespace ImprovedAI.Config
             public static int PerScanLimit { get; private set; } = 100;
             public static int MaxTaskAssignmentPerBatch { get; private set; } = 10;
             /// <summary>
-            /// Power usage for scheduler in Watts. Default 1MW (1,000,000 W).
-            /// </summary>
-            public static float SchedulerPowerUsage { get; private set; } = 1000000.0f;
-            /// <summary>
             /// Update intervals different for every state
             /// </summary>
             public static class StateUpdateIntervalTicks
