@@ -1,22 +1,67 @@
 ﻿using ImprovedAI.Config;
+using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
+using ProtoBuf;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
-using VRage.Collections;
-using VRage.Utils;
 using System.Text;
-using ImprovedAI.Utils;
-using ProtoBuf;
+using VRage.Collections;
+using VRage.Game;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
+using VRage.Utils;
+using VRageMath;
 
 namespace ImprovedAI.Network
 {
+    /// <summary>
+    /// Cached antenna info for an entity
+    /// </summary>
+    public class AntennaCache
+    {
+        public IMyRadioAntenna Antenna;
+        public Vector3D Position;
+        public double TransmitRange;
+        public long OwnerId;
+        public DateTime LastUpdate;
+
+        public bool IsValid()
+        {
+            return Antenna != null &&
+                   Antenna.IsFunctional &&
+                   Antenna.Enabled &&
+                   Antenna.EnableBroadcasting &&
+                   Antenna.IsWorking;
+        }
+    }
+
     public class MessageQueue
     {
-        [Serializable,ProtoContract]
+        private static MessageQueue _instance;
+        private static readonly object _instanceLock = new object();
+
+        public static MessageQueue Instance
+        {
+            get
+            {
+                if (_instance == null)
+                {
+                    lock (_instanceLock)
+                    {
+                        if (_instance == null)
+                        {
+                            _instance = new MessageQueue();
+                        }
+                    }
+                }
+                return _instance;
+            }
+        }
+
+        [Serializable, ProtoContract]
         private class TimestampedMessage
         {
-
             [ProtoMember(1)]
             public byte[] Data;
             [ProtoMember(2)]
@@ -29,12 +74,20 @@ namespace ImprovedAI.Network
             public MessageSerializationMode SerializationMode;
             [ProtoMember(6)]
             public bool RequiresAck;
+            [ProtoMember(7)]
+            public Vector3D SenderPosition;
+            [ProtoMember(8)]
+            public double SenderTransmitRange;
+            [ProtoMember(9)]
+            public long SenderOwnerId;
         }
 
-        // Configuration
         private readonly MessageSerializationMode serializationMode = ServerConfig.DroneNetwork.MessageSerializationMode;
 
-        // Existing fields...
+        // Antenna cache - updated when entities register/update
+        private readonly MyConcurrentDictionary<long, AntennaCache> _antennaCache;
+        private readonly TimeSpan _antennaCacheTimeout = TimeSpan.FromSeconds(5);
+
         private readonly MyConcurrentDictionary<ushort, MyConcurrentQueue<TimestampedMessage>> _topicQueues;
         private readonly MyConcurrentDictionary<ushort, MyConcurrentHashSet<long>> _topicSubscribers;
         private readonly MyConcurrentDictionary<long, DateTime> _lastReadTimes;
@@ -48,16 +101,11 @@ namespace ImprovedAI.Network
         private readonly TimeSpan _cleanupInterval = TimeUtil.TickToTimeSpan(ServerConfig.DroneNetwork.MessageCleanupIntervalTicks);
         private int _messageCounter = 0;
 
-        /// <summary>
-        /// Create MessageQueue with optional ProtoBuf serialization
-        /// </summary>
-        /// <param name="messageExpiration">How long messages stay in queue</param>
-        /// <param name="defaultSerializationMode">Default serialization mode</param>
-        /// <param name="allowMixedModes">Allow different serialization modes in same queue</param>
-        public MessageQueue(TimeSpan? messageExpiration = null, bool allowMixedModes = true)
+        public MessageQueue()
         {
             _messageExpiration = TimeUtil.TickToTimeSpan(ServerConfig.DroneNetwork.MessageRetentionTicks);
 
+            _antennaCache = new MyConcurrentDictionary<long, AntennaCache>();
             _topicQueues = new MyConcurrentDictionary<ushort, MyConcurrentQueue<TimestampedMessage>>();
             _topicSubscribers = new MyConcurrentDictionary<ushort, MyConcurrentHashSet<long>>();
             _lastReadTimes = new MyConcurrentDictionary<long, DateTime>();
@@ -67,48 +115,129 @@ namespace ImprovedAI.Network
         }
 
         /// <summary>
-        /// Send message with specific serialization mode
+        /// Register or update antenna for an entity
+        /// Call this when initializing or when antenna might have changed
         /// </summary>
-        public ushort SendMessage<T>(ushort topic, T message, long senderId = 0, bool requiresAck = false)
+        public bool RegisterAntenna(long entityId, IMyRadioAntenna antenna)
+        {
+            if (antenna == null || !antenna.IsFunctional)
+            {
+                Log.Warning("Cannot register entity {0} - invalid antenna", entityId);
+                return false;
+            }
+
+            var antennaBlock = antenna as IMyTerminalBlock;
+            if (antennaBlock == null)
+            {
+                Log.Warning("Cannot register entity {0} - antenna is not a terminal block", entityId);
+                return false;
+            }
+
+            var cache = new AntennaCache
+            {
+                Antenna = antenna,
+                Position = antenna.GetPosition(),
+                TransmitRange = antenna.Radius,
+                OwnerId = antennaBlock.OwnerId,
+                LastUpdate = DateTime.UtcNow
+            };
+
+            _antennaCache[entityId] = cache;
+            Log.Verbose("Entity {0} registered antenna with range {1}m", entityId, cache.TransmitRange);
+            return true;
+        }
+
+        /// <summary>
+        /// Update cached position and range for an entity
+        /// Call periodically (every few seconds) to keep cache fresh
+        /// </summary>
+        public void UpdateAntennaCache(long entityId)
+        {
+            AntennaCache cache;
+            if (!_antennaCache.TryGetValue(entityId, out cache))
+                return;
+
+            if (!cache.IsValid())
+            {
+                _antennaCache.TryRemove(entityId, out cache);
+                Log.Warning("Entity {0} antenna no longer valid, removed from cache", entityId);
+                return;
+            }
+
+            cache.Position = cache.Antenna.GetPosition();
+            cache.TransmitRange = cache.Antenna.Radius;
+            cache.LastUpdate = DateTime.UtcNow;
+        }
+
+        /// <summary>
+        /// Check if two entities can share information based on ownership
+        /// </summary>
+        private bool CanShare(long senderOwnerId, long receiverOwnerId, IMyTerminalBlock receiverBlock)
+        {
+            if (senderOwnerId == receiverOwnerId) return true;
+
+            if (receiverBlock != null)
+            {
+                var relation = receiverBlock.GetUserRelationToOwner(senderOwnerId);
+                return relation == MyRelationsBetweenPlayerAndBlock.Owner ||
+                       relation == MyRelationsBetweenPlayerAndBlock.FactionShare ||
+                       relation == MyRelationsBetweenPlayerAndBlock.Friends;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Send message with antenna range validation
+        /// </summary>
+        public ushort SendMessage<T>(ushort topic, T message, long senderId, bool requiresAck = false)
             where T : class
         {
             if (message == null) return 0;
+
+            // Get sender's cached antenna info
+            AntennaCache senderCache;
+            if (!_antennaCache.TryGetValue(senderId, out senderCache))
+            {
+                throw new InvalidOperationException($"Entity {senderId} not registered with message queue");
+            }
+
+            if (!senderCache.IsValid())
+            {
+                throw new InvalidOperationException($"Entity {senderId} antenna is not functional");
+            }
+
+            // Check if there are any subscribers
+            MyConcurrentHashSet<long> subscribers;
+            if (!_topicSubscribers.TryGetValue(topic, out subscribers) || subscribers.Count == 0)
+            {
+                throw new InvalidOperationException($"No subscribers listening to topic {topic}");
+            }
 
             try
             {
                 var serializedData = SerializeMessage(message);
                 if (serializedData == null) return 0;
 
-                return SendMessage(topic, serializedData, senderId, requiresAck, serializationMode);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("SendMessage<T> error: {0}", ex);
-                return 0;
-            }
-        }
-        private ushort SendMessage(ushort topic, byte[] message, long senderId = 0, bool requiresAck = false, MessageSerializationMode usedMode = MessageSerializationMode.ProtoBuf)
-        {
-            if (message == null) return 0;
-
-            try
-            {
                 var queue = _topicQueues.GetOrAdd(topic, _ => new MyConcurrentQueue<TimestampedMessage>());
                 var messageId = unchecked((ushort)System.Threading.Interlocked.Increment(ref _messageCounter));
 
                 var timestampedMessage = new TimestampedMessage
                 {
-                    Data = message,
+                    Data = serializedData,
                     Timestamp = DateTime.UtcNow,
                     SenderId = senderId,
                     MessageId = messageId,
                     RequiresAck = requiresAck,
-                    SerializationMode = usedMode, // Always track the serialization mode used
+                    SerializationMode = serializationMode,
+                    SenderPosition = senderCache.Position,
+                    SenderTransmitRange = senderCache.TransmitRange,
+                    SenderOwnerId = senderCache.OwnerId
                 };
 
                 queue.Enqueue(timestampedMessage);
 
-                if (requiresAck && senderId != 0)
+                if (requiresAck)
                 {
                     var pendingAcks = _pendingAcknowledgments.GetOrAdd(senderId, _ => new MyConcurrentHashSet<ushort>());
                     pendingAcks.Add(messageId);
@@ -119,63 +248,13 @@ namespace ImprovedAI.Network
             }
             catch (Exception ex)
             {
-                Log.Error("SendMessage error: {0}", ex);
+                Log.Error("SendMessage<T> error: {0}", ex);
                 return 0;
             }
         }
-        private byte[] SerializeMessage<T>(T message) where T : class
-        {
-            if (message == null) return null;
-
-            try
-            {
-                if (serializationMode == MessageSerializationMode.ProtoBuf)
-                {
-                    return TryProtoBufSerialization(message);
-                }
-                else
-                {
-                    return TryXmlSerialization(message);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning("Primary serialization failed, trying fallback: {0}", ex.Message);
-
-                // Fallback: try the opposite serialization mode
-                try
-                {
-                    if (serializationMode == MessageSerializationMode.ProtoBuf)
-                    {
-                        return TryXmlSerialization(message);
-                    }
-                    else
-                    {
-                        return TryProtoBufSerialization(message);
-                    }
-                }
-                catch (Exception fallbackEx)
-                {
-                    Log.Error("All serialization attempts failed: Primary: {0}, Fallback: {1}",
-                        ex.Message, fallbackEx.Message);
-                    return null;
-                }
-            }
-        }
-
-        private byte[] TryProtoBufSerialization<T>(T message) where T : class
-        {
-            return MyAPIGateway.Utilities.SerializeToBinary(message);
-        }
-
-        private byte[] TryXmlSerialization<T>(T message) where T : class
-        {
-            var xmlString = MyAPIGateway.Utilities.SerializeToXML(message);
-            return Encoding.UTF8.GetBytes(xmlString);
-        }
 
         /// <summary>
-        /// Read raw messages (original method)
+        /// Read messages with antenna range validation (IGC-like behavior)
         /// </summary>
         public List<T> ReadMessages<T>(long subscriberId, ushort topic, ushort maxMessages = 10)
             where T : class, new()
@@ -185,8 +264,7 @@ namespace ImprovedAI.Network
             try
             {
                 MyConcurrentHashSet<long> subscribers;
-                if (!_topicSubscribers.TryGetValue(topic, out subscribers) ||
-                    !subscribers.Contains(subscriberId))
+                if (!_topicSubscribers.TryGetValue(topic, out subscribers) || !subscribers.Contains(subscriberId))
                 {
                     return messages;
                 }
@@ -196,6 +274,22 @@ namespace ImprovedAI.Network
                     return messages;
                 }
 
+                // Get receiver's cached antenna info
+                AntennaCache receiverCache;
+                if (!_antennaCache.TryGetValue(subscriberId, out receiverCache))
+                {
+                    Log.Warning("Entity {0} not registered, cannot receive messages", subscriberId);
+                    return messages;
+                }
+
+                if (!receiverCache.IsValid())
+                {
+                    Log.Warning("Entity {0} antenna not functional, cannot receive messages", subscriberId);
+                    return messages;
+                }
+
+                var receiverBlock = receiverCache.Antenna as IMyTerminalBlock;
+
                 DateTime oldTime;
                 _lastReadTimes.TryRemove(subscriberId, out oldTime);
                 _lastReadTimes.TryAdd(subscriberId, DateTime.UtcNow);
@@ -204,23 +298,51 @@ namespace ImprovedAI.Network
                 if (_topicQueues.TryGetValue(topic, out queue))
                 {
                     var currentTime = DateTime.UtcNow;
+                    var tempMessages = new List<TimestampedMessage>();
 
+                    // Collect all messages
                     TimestampedMessage msg;
-                    while (messages.Count < maxMessages && queue.TryDequeue(out msg))
+                    while (queue.TryDequeue(out msg))
                     {
-                        if (currentTime - msg.Timestamp <= _messageExpiration)
-                        {
-                            var deserializedMsg = DeserializeMessage<T>(msg.Data);
-                            if (deserializedMsg != null)
-                            {
-                                messages.Add(deserializedMsg);
-                            }
+                        tempMessages.Add(msg);
+                    }
 
-                            if (msg.RequiresAck)
+                    // Process messages with range and ownership checking
+                    foreach (var message in tempMessages)
+                    {
+                        bool messageExpired = (currentTime - message.Timestamp) > _messageExpiration;
+
+                        if (!messageExpired)
+                        {
+                            // IGC behavior: receiver can receive if sender's transmit range reaches them
+                            double distance = Vector3D.Distance(message.SenderPosition, receiverCache.Position);
+                            bool inRange = distance <= message.SenderTransmitRange;
+
+                            // Check ownership/sharing
+                            bool canShareInfo = CanShare(message.SenderOwnerId, receiverCache.OwnerId, receiverBlock);
+
+                            bool canReceive = inRange && canShareInfo;
+
+                            if (canReceive && messages.Count < maxMessages)
                             {
-                                AckMessage(subscriberId, msg.MessageId);
+                                var deserializedMsg = DeserializeMessage<T>(message.Data);
+                                if (deserializedMsg != null)
+                                {
+                                    messages.Add(deserializedMsg);
+
+                                    if (message.RequiresAck)
+                                    {
+                                        AckMessage(subscriberId, message.MessageId);
+                                    }
+                                }
+                            }
+                            else if (!canReceive)
+                            {
+                                // Re-queue for other potential receivers
+                                queue.Enqueue(message);
                             }
                         }
+                        // Expired messages are dropped
                     }
                 }
             }
@@ -232,187 +354,53 @@ namespace ImprovedAI.Network
             return messages;
         }
 
-        /// <summary>
-        /// Automatically detect and deserialize message data
-        /// </summary>
+        private byte[] SerializeMessage<T>(T message) where T : class
+        {
+            if (message == null) return null;
+
+            try
+            {
+                if (serializationMode == MessageSerializationMode.ProtoBuf)
+                    return MyAPIGateway.Utilities.SerializeToBinary(message);
+                else
+                    return Encoding.UTF8.GetBytes(MyAPIGateway.Utilities.SerializeToXML(message));
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Serialization failed: {0}", ex);
+                return null;
+            }
+        }
+
         private T DeserializeMessage<T>(byte[] data) where T : class, new()
         {
             if (data == null || data.Length == 0) return null;
 
             try
             {
-                // First, try the configured serialization mode
                 if (serializationMode == MessageSerializationMode.ProtoBuf)
-                {
-                    return TryProtoBufDeserialization<T>(data);
-                }
+                    return MyAPIGateway.Utilities.SerializeFromBinary<T>(data);
                 else
-                {
-                    return TryXmlDeserialization<T>(data);
-                }
+                    return MyAPIGateway.Utilities.SerializeFromXML<T>(Encoding.UTF8.GetString(data));
             }
             catch (Exception ex)
             {
-                Log.Warning("Primary deserialization failed, trying fallback: {0}", ex.Message);
-
-                // Fallback: try the opposite serialization mode
-                try
-                {
-                    if (serializationMode == MessageSerializationMode.ProtoBuf)
-                    {
-                        return TryXmlDeserialization<T>(data);
-                    }
-                    else
-                    {
-                        return TryProtoBufDeserialization<T>(data);
-                    }
-                }
-                catch (Exception fallbackEx)
-                {
-                    Log.Error("All deserialization attempts failed: Primary: {0}, Fallback: {1}",
-                        ex.Message, fallbackEx.Message);
-                    return null;
-                }
+                Log.Error("Deserialization failed: {0}", ex);
+                return null;
             }
         }
 
-        private T TryProtoBufDeserialization<T>(byte[] data) where T : class, new()
-        {
-            return MyAPIGateway.Utilities.SerializeFromBinary<T>(data);
-        }
-
-        private T TryXmlDeserialization<T>(byte[] data) where T : class, new()
-        {
-            var xmlString = Encoding.UTF8.GetString(data);
-            return MyAPIGateway.Utilities.SerializeFromXML<T>(xmlString);
-        }
-
-        /// <summary>
-        /// Read ProtoBuf messages with automatic deserialization
-        /// </summary>
-        public List<T> ReadProtoBufMessages<T>(long subscriberId, ushort topic, ushort maxMessages = 10)
-            where T : class
-        {
-            var messages = new List<T>();
-
-            try
-            {
-                MyConcurrentHashSet<long> subscribers;
-                if (!_topicSubscribers.TryGetValue(topic, out subscribers) ||
-                    !subscribers.Contains(subscriberId))
-                {
-                    return messages;
-                }
-
-                if (!CanReadNow(subscriberId))
-                {
-                    return messages;
-                }
-
-                DateTime oldTime;
-                _lastReadTimes.TryRemove(subscriberId, out oldTime);
-                _lastReadTimes.TryAdd(subscriberId, DateTime.UtcNow);
-
-                MyConcurrentQueue<TimestampedMessage> queue;
-                if (_topicQueues.TryGetValue(topic, out queue))
-                {
-                    var currentTime = DateTime.UtcNow;
-
-                    TimestampedMessage msg;
-                    while (messages.Count < maxMessages && queue.TryDequeue(out msg))
-                    {
-                        if (currentTime - msg.Timestamp <= _messageExpiration)
-                        {
-                            try
-                            {
-                                // Deserialize based on how it was stored
-                                T deserializedMsg = null;
-
-                                if (serializationMode == MessageSerializationMode.ProtoBuf)
-                                {
-                                    deserializedMsg = MyAPIGateway.Utilities.SerializeFromBinary<T>(msg.Data);
-                                }
-                                else
-                                {
-                                    // Try to deserialize raw data as ProtoBuf (for mixed mode compatibility)
-                                    deserializedMsg = MyAPIGateway.Utilities.SerializeFromXML<T>(Encoding.Default.GetString(msg.Data));
-                                }
-
-                                if (deserializedMsg != null)
-                                {
-                                    messages.Add(deserializedMsg);
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Log.Warning("Failed to deserialize message ID {0}: {1}", msg.MessageId, ex.Message);
-                                // Skip this message but continue processing others
-                            }
-
-                            if (msg.RequiresAck)
-                            {
-                                AckMessage(subscriberId, msg.MessageId);
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error("ReadProtoBufMessages error: {0}", ex);
-            }
-
-            return messages;
-        }
-
-
-
-        // Include all your existing methods (Subscribe, Unsubscribe, AckMessage, etc.)
-        // ... (existing implementation stays the same)
         public void Subscribe(long subscriberId, ushort topic)
         {
-            try
-            {
-                var subscribers = _topicSubscribers.GetOrAdd(topic, _ => new MyConcurrentHashSet<long>());
-                subscribers.Add(subscriberId);
-                _readThrottleIntervals.TryAdd(subscriberId, TimeSpan.FromMilliseconds(100));
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Subscribe error: {0}", ex);
-            }
+            var subscribers = _topicSubscribers.GetOrAdd(topic, _ => new MyConcurrentHashSet<long>());
+            subscribers.Add(subscriberId);
+            _readThrottleIntervals.TryAdd(subscriberId, TimeSpan.FromMilliseconds(100));
         }
 
         public bool AckMessage(long subscriberId, ushort messageId)
         {
-            try
-            {
-                var ackSet = _messageAcknowledgments.GetOrAdd(messageId, _ => new MyConcurrentHashSet<long>());
-                return ackSet.Add(subscriberId);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("AckMessage error: {0}", ex);
-                return false;
-            }
-        }
-
-        public bool IsMessageAcknowledged(long senderId, ushort messageId)
-        {
-            try
-            {
-                MyConcurrentHashSet<ushort> pendingAcks;
-                if (_pendingAcknowledgments.TryGetValue(senderId, out pendingAcks))
-                {
-                    return !pendingAcks.Contains(messageId);
-                }
-                return true;
-            }
-            catch (Exception ex)
-            {
-                Log.Error("IsMessageAcknowledged error: {0}", ex);
-                return false;
-            }
+            var ackSet = _messageAcknowledgments.GetOrAdd(messageId, _ => new MyConcurrentHashSet<long>());
+            return ackSet.Add(subscriberId);
         }
 
         private bool CanReadNow(long subscriberId)
@@ -427,6 +415,7 @@ namespace ImprovedAI.Network
 
             return DateTime.UtcNow - lastRead >= throttleInterval;
         }
+
         private void TryPerformCleanup()
         {
             var now = DateTime.UtcNow;
@@ -436,119 +425,65 @@ namespace ImprovedAI.Network
             lock (_cleanupLock)
             {
                 if (now - _lastCleanup < _cleanupInterval)
-                    return; // Another thread already did cleanup
+                    return;
 
                 _lastCleanup = now;
                 PerformCleanup();
+                CleanupStaleAntennas();
+            }
+        }
+
+        private void CleanupStaleAntennas()
+        {
+            var staleEntities = new List<long>();
+            var now = DateTime.UtcNow;
+
+            foreach (var kvp in _antennaCache)
+            {
+                if (now - kvp.Value.LastUpdate > _antennaCacheTimeout || !kvp.Value.IsValid())
+                {
+                    staleEntities.Add(kvp.Key);
+                }
+            }
+
+            foreach (var entityId in staleEntities)
+            {
+                AntennaCache removed;
+                _antennaCache.TryRemove(entityId, out removed);
+                Log.Verbose("Removed stale antenna cache for entity {0}", entityId);
             }
         }
 
         private void PerformCleanup()
         {
-            try
+            var currentTime = DateTime.UtcNow;
+
+            foreach (var kvp in _topicQueues)
             {
-                var currentTime = DateTime.UtcNow;
-                var topicsToRemove = new List<ushort>();
+                var queue = kvp.Value;
+                var newQueue = new MyConcurrentQueue<TimestampedMessage>();
 
-                foreach (var kvp in _topicQueues)
+                TimestampedMessage message;
+                while (queue.TryDequeue(out message))
                 {
-                    var topic = kvp.Key;
-                    var queue = kvp.Value;
-
-                    // Create a new queue with only non-expired messages
-                    var newQueue = new MyConcurrentQueue<TimestampedMessage>();
-                    var hasValidMessages = false;
-
-                    TimestampedMessage message;
-                    while (queue.TryDequeue(out message))
+                    if (currentTime - message.Timestamp <= _messageExpiration)
                     {
-                        if (currentTime - message.Timestamp <= _messageExpiration)
-                        {
-                            newQueue.Enqueue(message);
-                            hasValidMessages = true;
-                        }
-                    }
-
-                    if (hasValidMessages)
-                    {
-                        // Replace the old queue with the cleaned one by removing and re-adding
-                        MyConcurrentQueue<TimestampedMessage> removedQueue;
-                        _topicQueues.TryRemove(topic, out removedQueue);
-                        _topicQueues.TryAdd(topic, newQueue);
-                    }
-                    else
-                    {
-                        // Mark topic for removal if no valid messages
-                        topicsToRemove.Add(topic);
+                        newQueue.Enqueue(message);
                     }
                 }
 
-                // Remove empty topics
-                foreach (var topic in topicsToRemove)
+                MyConcurrentQueue<TimestampedMessage> oldQueue;
+                _topicQueues.TryRemove(kvp.Key, out oldQueue);
+                if (newQueue.Count > 0)
                 {
-                    MyConcurrentQueue<TimestampedMessage> removedQueue;
-                    _topicQueues.TryRemove(topic, out removedQueue);
-
-                    // Also clean up subscriber lists for removed topics
-                    MyConcurrentHashSet<long> subscribers;
-                    if (_topicSubscribers.TryGetValue(topic, out subscribers) && subscribers.Count == 0)
-                    {
-                        MyConcurrentHashSet<long> removedSubscribers;
-                        _topicSubscribers.TryRemove(topic, out removedSubscribers);
-                    }
+                    _topicQueues.TryAdd(kvp.Key, newQueue);
                 }
-
-                // Clean up old acknowledgments
-                CleanupOldAcknowledgments(currentTime);
-            }
-            catch (Exception ex)
-            {
-                MyLog.Default.WriteLine($"MessageQueue: Cleanup error: {ex}");
             }
         }
 
-        private void CleanupOldAcknowledgments(DateTime currentTime)
+        public static void Reset()
         {
-            try
-            {
-                // Clean up acknowledgment tracking for messages older than expiration time
-                // Since we don't store message timestamps in the ack system, we'll use a simpler approach:
-                // Remove acknowledgments for message IDs that are significantly old based on the counter
-
-                var currentMessageId = unchecked((ushort)_messageCounter);
-                var oldThreshold = unchecked((ushort)(currentMessageId - 1000)); // Rough estimate for old messages
-
-                var acksToRemove = new List<ushort>();
-                foreach (var kvp in _messageAcknowledgments)
-                {
-                    var messageId = kvp.Key;
-
-                    // Simple heuristic: if message ID is much lower than current, it's probably old
-                    // Note: This handles counter wraparound reasonably well for ushort range
-                    var ageDiff = unchecked((ushort)(currentMessageId - messageId));
-                    if (ageDiff > 500 && ageDiff < 60000) // Old but not wrapped around
-                    {
-                        acksToRemove.Add(messageId);
-                    }
-                }
-
-                // Remove old acknowledgments
-                foreach (var messageId in acksToRemove)
-                {
-                    MyConcurrentHashSet<long> removedAcks;
-                    _messageAcknowledgments.TryRemove(messageId, out removedAcks);
-
-                    // Also remove from pending acknowledgments for all senders
-                    foreach (var senderEntry in _pendingAcknowledgments)
-                    {
-                        senderEntry.Value.Remove(messageId);
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MyLog.Default.WriteLine($"MessageQueue: CleanupOldAcknowledgments error: {ex}");
-            }
+            _instance = null;
         }
     }
 }

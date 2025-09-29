@@ -1,12 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
 	<CubeBlocks>
-
-		<!-- Small Grid AI Constructor -->
+		<!-- Improved AI block definitions-->
 		<Definition xsi:type="MyObjectBuilder_RemoteControlDefinition">
 			<Id>
 				<TypeId>RemoteControl</TypeId>
-				<SubtypeId>ImprovedAISmallDroneControl</SubtypeId>
+				<SubtypeId>ImprovedAISmallDroneController</SubtypeId>
 			</Id>
 			<DisplayName>AI Constructor (Small)</DisplayName>
 			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
@@ -42,12 +41,10 @@
 			<PCU>25</PCU>
 			<IsAirTight>false</IsAirTight>
 		</Definition>
-
-		<!-- Large Grid AI Constructor -->
 		<Definition xsi:type="MyObjectBuilder_RemoteControlDefinition">
 			<Id>
 				<TypeId>RemoteControl</TypeId>
-				<SubtypeId>ImprovedAILargeDroneControl</SubtypeId>
+				<SubtypeId>ImprovedAILargeDroneController</SubtypeId>
 			</Id>
 			<DisplayName>AI Constructor (Large)</DisplayName>
 			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
@@ -136,5 +133,50 @@
 			<DestroySound>WepSmallWarheadExpl</DestroySound>
 			<PCU>25</PCU>
 		</Definition>
+		<Definition xsi:type="MyObjectBuilder_TimerBlockDefinition">
+			<Id>
+				<TypeId>TimerBlock</TypeId>
+				<SubtypeId>ImprovedAILargeLogisticsComputer</SubtypeId>
+			</Id>
+			<DisplayName>DisplayName_Block_TimerBlock</DisplayName>
+			<Icon>Textures\GUI\Icons\Cubes\TimerBlock.dds</Icon>
+			<Description>Description_Timer</Description>
+			<CubeSize>Large</CubeSize>
+			<GuiVisible>false</GuiVisible>
+			<BlockTopology>TriangleMesh</BlockTopology>
+			<Size x="1" y="1" z="1" />
+			<ModelOffset x="0" y="0" z="0" />
+			<Model>Models\Cubes\Large\TimerBlock.mwm</Model>
+			<Components>
+				<Component Subtype="InteriorPlate" Count="6" />
+				<Component Subtype="Construction" Count="20" />
+				<Component Subtype="Computer" Count="5" />
+				<Component Subtype="Construction" Count="10" />
+			</Components>
+			<CriticalComponent Subtype="Computer" Index="0" />
+			<BuildProgressModels>
+				<Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\TimerBlockConstruction_1.mwm" />
+				<Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\TimerBlockConstruction_2.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\TimerBlockConstruction_3.mwm" />
+			</BuildProgressModels>
+			<BlockPairName>TimerBlock</BlockPairName>
+			<EdgeType>Light</EdgeType>
+			<ResourceSinkGroup>Utility</ResourceSinkGroup>
+			<BuildTimeSeconds>10</BuildTimeSeconds>
+			<DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
+			<DamagedSound>ParticleElectrical</DamagedSound>
+			<PrimarySound>BlockTimer</PrimarySound>
+			<TimerSoundStart>BlockTimerSignalA</TimerSoundStart>
+			<TimerSoundMid>BlockTimerSignalB</TimerSoundMid>
+			<TimerSoundEnd>BlockTimerSignalC</TimerSoundEnd>
+			<EmissiveColorPreset>Timer</EmissiveColorPreset>
+			<DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>
+			<DestroySound>WepSmallWarheadExpl</DestroySound>
+			<MirroringY>Z</MirroringY>
+			<MirroringZ>Y</MirroringZ>
+			<PCU>25</PCU>
+			<IsAirTight>true</IsAirTight>
+		</Definition>
+		<!-- End Improved AI block definitions-->
 	</CubeBlocks>
 </Definitions>

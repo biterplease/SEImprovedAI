@@ -41,7 +41,10 @@ namespace ImprovedAI.Config
         private static bool _configLoaded = false;
         private static readonly string CONFIG_FILENAME = "BetterAIConstructor.cfg";
 
-        // Limits
+        public static class Session
+        {
+            public static int UpdateInterval { get; private set; } = 100;
+        }
 
         public static class BlockLimits
         {

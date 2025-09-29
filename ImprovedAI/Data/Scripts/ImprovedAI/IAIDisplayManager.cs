@@ -1,6 +1,4 @@
-﻿using BetterAIConstructor.Config;
-using BetterAIConstructor.Interfaces;
-using Sandbox.ModAPI;
+﻿using Sandbox.ModAPI;
 using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Generic;

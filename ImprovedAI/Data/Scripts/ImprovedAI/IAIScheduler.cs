@@ -1,31 +1,22 @@
-﻿using ImprovedAI;
-using ImprovedAI.BlockConfig;
+﻿using ImprovedAI.BlockConfig;
 using ImprovedAI.Config;
 using ImprovedAI.Messages;
 using ImprovedAI.Network;
 using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
-using ProtoBuf;
-using Sandbox.Engine.Utils;
-using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using VRage;
 using VRage.Collections;
-using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRage.Utils;
 using VRageMath;
 using static ImprovedAI.Config.ServerConfig;
-using static VRage.Game.MyObjectBuilder_BehaviorTreeDecoratorNode;
 
-namespace ImprovedAIScheduler
+namespace ImprovedAI
 {
     [Flags]
     public enum SchedulerOperationMode : byte
@@ -170,7 +161,7 @@ namespace ImprovedAIScheduler
         public Vector3D connectors;
         public IAIInventory LastKnownInventory;
     }
-    internal class IAIScheduler
+    public class IAIScheduler
     {
         private MyConcurrentDictionary<long, Drone> registeredDrones = new MyConcurrentDictionary<long, Drone>();
         private MyConcurrentDictionary<long, LogisticsGrid> registeredLogisticsGrids = new MyConcurrentDictionary<long, LogisticsGrid>();
@@ -187,9 +178,16 @@ namespace ImprovedAIScheduler
         /// this scheduler can safely remove the task, as it has been picked up by a different scheduler.
         /// </summary>
         private MyConcurrentDictionary<ushort, uint> delegatedTasksNeedingAck = new MyConcurrentDictionary<ushort, uint>();
-        private SchedulerState currentState;
-        private SchedulerOperationMode operationMode;
-        private WorkModes workModes;
+        public SchedulerState currentState { get; private set; }
+
+
+        private static Dictionary<long, AntennaInfo> antennaCache = new Dictionary<long, AntennaInfo>();
+        public int PerScanLimits { get; set; }
+        private int _perScanLimits;
+        public int MaxTasksAssignedPerBatch { get; set; }
+        private int _maxTasksAssignedPerBatch;
+
+        // Management
         private long entityId;
         private readonly IdGenerator _idGenerator;
         private int _lastUpdateFrame = 0;
@@ -197,25 +195,19 @@ namespace ImprovedAIScheduler
         private int _consecutiveErrors = 0;
         private long _lastErrorRecoveryAttemptFrame = 0;
         private long _lastMaintenanceFrame = 0;
+        private long _lastAntennaCacheUpdateFrame = 0;
 
-
-        private static Dictionary<long, AntennaInfo> antennaCache = new Dictionary<long, AntennaInfo>();
-        private static readonly TimeSpan CACHE_UPDATE_INTERVAL = TimeUtil.TickToTimeSpan(ServerConfig.DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks);
-        private static readonly int ScanTargetLimit = ServerConfig.SchedulerBounds.MaxTargetLimit;
-        public int PerScanLimits { get; set; }
-        private int _perScanLimits;
-        public int MaxTasksAssignedPerBatch { get; set; }
-        private int _maxTasksAssignedPerBatch;
-
-        private int _initializingUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Initializing;
-        private int _errorUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Error;
-        private int _standbyUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Standby;
-        private int _scanningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Scanning;
-        private int _assigningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Assigning;
-        private int _scanRetryIntervalTicks = SchedulerBounds.ScanDelayTicks;
-        private int _errorRecoveryIntervalTicks = SchedulerBounds.ErrorRecoveryIntervalTicks;
-        private int _maxConsecutiveErrors = SchedulerBounds.MaxConsecutiveErrors;
-        private int _maintenanceIntervalTicks = SchedulerBounds.ManintenanceIntervalTicks;
+        // Server settings
+        private readonly int _initializingUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Initializing;
+        private readonly int _errorUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Error;
+        private readonly int _standbyUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Standby;
+        private readonly int _scanningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Scanning;
+        private readonly int _assigningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Assigning;
+        private readonly int _scanRetryIntervalTicks = SchedulerBounds.ScanDelayTicks;
+        private readonly int _errorRecoveryIntervalTicks = SchedulerBounds.ErrorRecoveryIntervalTicks;
+        private readonly int _maxConsecutiveErrors = SchedulerBounds.MaxConsecutiveErrors;
+        private readonly int _maintenanceIntervalTicks = SchedulerBounds.ManintenanceIntervalTicks;
+        private readonly int _antennaCacheUpdateIntervalTicks = DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks;
         /// <summary>
         /// Timeout after which drones are removed if we don't hear from them again.
         /// </summary>
@@ -241,24 +233,21 @@ namespace ImprovedAIScheduler
         private IMyEntity Entity;
         private IMyRadioAntenna ownAntenna;
         private int broadcastUpdatesChannel = 1;
-        private bool isEnabled;
         private readonly object _taskLock = new object();
         /// <summary>
         /// Range in meters after which tasks are ignored.
         /// </summary>
+
+        // block settings
+        public bool isEnabled { get; set; }
+        public SchedulerOperationMode operationMode;
+        public WorkModes workModes;
         private bool ignoreTasksOutsideSpecifiedRange = false;
         private float ignoreTasksOutsideSpecifiedRangeMeters = 1000.0f;
         private bool ignoreTasksOutsideOfAntenaRange = true;
-
-
-        // block settings
         private bool _initialized = false;
-
-
         private bool ignoreWeldColorEnabled;
         private Vector3 weldIgnoreColor;
-
-        private bool grindColorEnabled;
         private Vector3 grindColor;
 
         private Dictionary<TaskType, List<Task>> pendingTasks;
@@ -291,6 +280,14 @@ namespace ImprovedAIScheduler
         }
 
 
+        public void Init(MyGameLogicComponent _base, MyObjectBuilder_EntityBase objectBuilder)
+        {
+            Log.Info("Initializing {0}", Log.BlockName(Entity));
+            // This method is called async! Use UpdateOnceBeforeFrame for proper initialization
+            _base.Init(objectBuilder);
+            _base.NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+        }
+
         public void UpdateBeforeSimulation(MyGameLogicComponent _base)
         {
             try
@@ -302,15 +299,6 @@ namespace ImprovedAIScheduler
             {
                 Log.Error(ex);
             }
-        }
-
-        public void Init(MyGameLogicComponent _base, MyObjectBuilder_EntityBase objectBuilder)
-        {
-            Log.Info("Initializing {0}", Log.BlockName(Entity));
-            // This method is called async! Use UpdateOnceBeforeFrame for proper initialization
-            _base.Init(objectBuilder);
-            _base.NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
-
         }
 
 
@@ -373,6 +361,7 @@ namespace ImprovedAIScheduler
 
         private void Initialize()
         {
+            messaging = IAISession.Instance.MessageQueue;
             currentState = SchedulerState.Initializing;
             long schedulerId = this.entityId;
 
@@ -595,13 +584,15 @@ namespace ImprovedAIScheduler
             return;
 
         }
-        private static void UpdateAntennaCache(IMyRadioAntenna schedulerAntenna)
+        private void UpdateAntennaCache(IMyRadioAntenna schedulerAntenna)
         {
-            var now = DateTime.Now;
-            if (now - lastCacheUpdate < CACHE_UPDATE_INTERVAL)
+            var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
+            var updateInterval = _antennaCacheUpdateIntervalTicks;
+
+            if (currentFrame - _lastAntennaCacheUpdateFrame < updateInterval)
                 return;
 
-            lastCacheUpdate = now;
+            _lastAntennaCacheUpdateFrame = currentFrame;
             antennaCache.Clear();
 
             try
@@ -627,7 +618,7 @@ namespace ImprovedAIScheduler
                         Range = antenna.IsWorking && antenna.EnableBroadcasting ? antenna.Radius : 0.0,
                         IsWorking = antenna.IsWorking && antenna.EnableBroadcasting,
                         GridId = antenna.CubeGrid.EntityId,
-                        LastUpdate = now
+                        LastUpdate = DateTime.UtcNow
                     };
 
                     antennaCache[antenna.EntityId] = antennaInfo;
@@ -656,7 +647,6 @@ namespace ImprovedAIScheduler
         private bool ShouldGrind(IMySlimBlock block)
         {
             if (workModes.HasFlag(WorkModes.Grind) &&
-                grindColorEnabled &&
                 ColorUtil.ColorMatch(block, grindColor))
                 return true;
 

@@ -1,1068 +1,315 @@
-﻿using BetterAIConstructor.Config;
-using BetterAIConstructor.Display;
-using BetterAIConstructor.DroneConfig;
-using BetterAIConstructor.Interfaces;
-using BetterAIConstructor.Navigation;
-using BetterAIConstructor.Pathfinding;
-using ImprovedAI.Config;
+﻿using ImprovedAI;
 using ImprovedAI.Utils.Logging;
-using ImprovedAIScheduler;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.EntityComponents;
-using Sandbox.Game.Weapons;
 using Sandbox.ModAPI;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using VRage.Game;
 using VRage.Game.Components;
 using VRage.Game.ModAPI;
-using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
-using VRageMath;
-using static ImprovedAI.Config.ServerConfig;
 
 namespace ImprovedAI
 {
-    
-    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_BroadcastController), false, "ImprovedAISmallScheduler", "ImprovedAILargeScheduler")]
+    /// <summary>
+    /// Game logic component that bridges the Space Engineers block system with the IAIScheduler functionality
+    /// </summary>
+    [MyEntityComponentDescriptor(typeof(MyObjectBuilder_RemoteControl), false, "ImprovedAILargeScheduler")]
     public class IAISchedulerBlock : MyGameLogicComponent
     {
-
+        // The actual scheduler instance
         private IAIScheduler scheduler;
-        // Core components
-
-        // Block references
-        private IMyShipController shipController;
-
-        // AI State
-        private AIState currentState = AIState.Initializing;
-        private string statusMessage = "Initializing...";
-        private bool isEnabled = false;
-        private bool capabilitiesValid = false;
-        private int tickCounter = 0;
-
-        private bool _isInit = false;
-
-        // Component references
-        private IMyRadioAntenna antenna;
 
         // Configuration
-        private const int UPDATE_INTERVAL = 10;
-        private int consecutiveErrors = 0;
-        private const int MAX_CONSECUTIVE_ERRORS = 3;
+        private SchedulerOperationMode operationMode = SchedulerOperationMode.Orchestrator;
+        private WorkModes workModes = WorkModes.WeldUnfinishedBlocks | WorkModes.RepairDamagedBlocks;
 
+        // State tracking
+        private bool isInitialized = false;
+        private int initializationTicks = 0;
+        private const int INITIALIZATION_DELAY = 60; // Wait 1 second for grid to stabilize
+
+        /// <summary>
+        /// Provides access to the internal scheduler for terminal controls and debugging
+        /// </summary>
+        public IAIScheduler Scheduler => scheduler;
+
+
+        /// <summary>
+        /// Gets whether the scheduler is enabled
+        /// </summary>
+        public bool IsEnabled => scheduler?.isEnabled ?? false;
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
-            Log.Info("Initializing {0}", Log.BlockName(Entity));
-            // This method is called async! Use UpdateOnceBeforeFrame for proper initialization
-            base.Init(objectBuilder);
-            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+            try
+            {
+                // Create the scheduler instance with this entity
+                scheduler = new IAIScheduler(Entity, operationMode, workModes);
 
+                // Set update flags - we need both frequent and infrequent updates
+                NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
+
+                Log.Info("Scheduler block initializing: {0}", Entity.DisplayName);
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Init", ex);
+            }
         }
 
         public override void UpdateOnceBeforeFrame()
         {
             try
             {
-                shipController = Entity as IMyShipController;
-
-                if (shipController?.CubeGrid?.Physics == null)
-                    return; // Ignore projected and non-physical grids
-
                 if (!MyAPIGateway.Session.IsServer)
-                    return; // Only run on server
+                    return;
 
-                // Check if this constructor is allowed based on server limits
-                if (!CheckConstructionLimits())
+                // Initialize scheduler's base components
+                if (scheduler != null)
                 {
-                    // Mark for removal if limits exceeded
-                    Entity.Close();
+                    scheduler.Init(this, Entity.GetObjectBuilder());
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("UpdateOnceBeforeFrame", ex);
+            }
+        }
+
+        public override void UpdateBeforeSimulation()
+        {
+            try
+            {
+                if (!isInitialized)
+                {
+                    initializationTicks++;
+                    if (initializationTicks >= INITIALIZATION_DELAY)
+                    {
+                        InitializeScheduler();
+                    }
                     return;
                 }
 
-                // Wait a bit for grid to be stable before initializing components
-                NeedsUpdate = MyEntityUpdateEnum.EACH_10TH_FRAME;
-                tickCounter = 0;
-
-                MyAPIGateway.Utilities.ShowMessage("ImprovedAI", $"AI scheduler block initialized: {Entity.DisplayName}");
+                if (scheduler != null && MyAPIGateway.Session.IsServer)
+                {
+                    scheduler.UpdateBeforeSimulation(this);
+                }
             }
             catch (Exception ex)
             {
-               Log.Error($"Initialization error: {ex.Message}");
+                Log.Error("UpdateBeforeSimulation", ex);
             }
         }
 
-
-        private bool CheckConstructionLimits()
+        public override void UpdateBeforeSimulation10()
         {
             try
             {
-                var cubeBlock = Entity as IMyCubeBlock;
-                long ownerId = cubeBlock?.OwnerId ?? 0;
-                if (ownerId == 0)
-                {
-                    Log.Error("failed to get owner id from entity {0}", Entity.EntityId);
-                }
-                var ownerFaction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(ownerId);
-
-                // Check total server limit
-                if (!ServerConfig.CanPlayerCreateScheduler())
-                {
-                    MyAPIGateway.Utilities.ShowMessage("BetterAI_Constructor",
-                        $"Cannot create AI Constructor: Server limit of {ServerConfigManager.MaxConstructorsTotal} reached");
-                    return false;
-                }
-
-                // Check player limit
-                if (!ServerConfigManager.CanPlayerCreateConstructor(ownerId))
-                {
-                    MyAPIGateway.Utilities.ShowMessage("BetterAI_Constructor",
-                        $"Cannot create AI Constructor: Player limit of {ServerConfigManager.MaxConstructorsPerPlayer} reached");
-                    return false;
-                }
-
-                // Check faction limit
-                if (ownerFaction != null && !ServerConfigManager.CanFactionCreateConstructor(ownerFaction.FactionId))
-                {
-                    MyAPIGateway.Utilities.ShowMessage("BetterAI_Constructor",
-                        $"Cannot create AI Constructor: Faction limit of {ServerConfigManager.MaxConstructorsPerFaction} reached");
-                    return false;
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LogError("CheckConstructionLimits", ex);
-                return true; // Allow creation if check fails to avoid blocking legitimate use
-            }
-        }
-
-        private void ApplyServerDefaults()
-        {
-            try
-            {
-                // Apply server-configured defaults to new blocks
-                if (ServerConfigManager.DefaultMonitorHydrogen)
-                {
-                    config.MonitorHydrogenLevels = true;
-                    config.HydrogenRefuelThreshold = ServerConfigManager.DefaultHydrogenRefuelThreshold;
-                    config.HydrogenOperationalThreshold = ServerConfigManager.DefaultHydrogenOperationalThreshold;
-                }
-
-                if (ServerConfigManager.DefaultMonitorBattery)
-                {
-                    config.MonitorBatteryLevels = true;
-                    config.BatteryRefuelThreshold = ServerConfigManager.DefaultBatteryRefuelThreshold;
-                    config.BatteryOperationalThreshold = ServerConfigManager.DefaultBatteryOperationalThreshold;
-                }
-
-                // Apply server safety limits
-                if (ServerConfigManager.EnableSafetyLimits)
-                {
-                    config.MaxApproachSpeed = Math.Min(config.MaxApproachSpeed, ServerConfigManager.MaxThrustOverride * 15.0f);
-                    config.MaxTravelSpeed = Math.Min(config.MaxTravelSpeed, ServerConfigManager.MaxThrustOverride * 50.0f);
-                }
-
-                // Ensure power thresholds are within server limits
-                config.HydrogenRefuelThreshold = MathHelper.Clamp(config.HydrogenRefuelThreshold,
-                    ServerConfigManager.MinPowerThreshold, ServerConfigManager.MaxPowerThreshold);
-                config.HydrogenOperationalThreshold = MathHelper.Clamp(config.HydrogenOperationalThreshold,
-                    ServerConfigManager.MinPowerThreshold, ServerConfigManager.MaxPowerThreshold);
-                config.BatteryRefuelThreshold = MathHelper.Clamp(config.BatteryRefuelThreshold,
-                    ServerConfigManager.MinPowerThreshold, ServerConfigManager.MaxPowerThreshold);
-                config.BatteryOperationalThreshold = MathHelper.Clamp(config.BatteryOperationalThreshold,
-                    ServerConfigManager.MinPowerThreshold, ServerConfigManager.MaxPowerThreshold);
-            }
-            catch (Exception ex)
-            {
-                LogError("ApplyServerDefaults", ex);
-            }
-        }
-
-
-        private bool ShouldEnterSleepMode()
-        {
-            // Check if any players are nearby
-            var players = new List<IMyPlayer>();
-            MyAPIGateway.Players.GetPlayers(players);
-
-            var myPosition = GetPosition();
-            foreach (var player in players)
-            {
-                if (Vector3D.DistanceSquared(player.GetPosition(), myPosition) < 2500) // 50m range
-                    return false;
-            }
-
-            return players.Count > 0; // Only sleep if players exist but are far away
-        }
-        private int GetUpdateInterval()
-        {
-            switch (currentState)
-            {
-                case AIState.Standby:
-                case AIState.Error:
-                    return 60; // Update every 6 seconds when idle
-                case AIState.ScanningTargets:
-                    return 30; // Update every 3 seconds when scanning
-                case AIState.Welding:
-                case AIState.Grinding:
-                    return 6;  // Update every 0.6 seconds when working
-                default:
-                    return 10; // Default 1 second updates
-            }
-        }
-        public override void UpdateAfterSimulation10()
-        {
-            if (tickCounter % GetUpdateInterval() != 0) return;
-            try
-            {
-                if (!MyAPIGateway.Session.IsServer || shipController?.CubeGrid?.Physics == null)
+                if (!isInitialized)
                     return;
 
-                tickCounter++;
-
-                // Delayed initialization after grid stabilizes
-                if (tickCounter == 10) // After ~2.5 seconds
+                if (scheduler != null && MyAPIGateway.Session.IsServer)
                 {
-                    InitializeComponents();
-                    navigationManager = new NavigationManager(this, pathfindingManager, config);
-                    displayManager = new DisplayManager(this, config);
-
-                    // Register with session
-                    BAISession.Instance?.RegisterAIConstructor(this);
-
-                    NeedsUpdate = MyEntityUpdateEnum.EACH_10TH_FRAME;
+                    scheduler.UpdateBeforeSimulation10(this);
                 }
-                else if (tickCounter > 10)
+            }
+            catch (Exception ex)
+            {
+                Log.Error("UpdateBeforeSimulation10", ex);
+            }
+        }
+        private void InitializeScheduler()
+        {
+            try
+            {
+                if (isInitialized)
+                    return;
+
+                // Load configuration from block storage if available
+                LoadConfiguration();
+
+                // Mark as initialized
+                isInitialized = true;
+
+                MyAPIGateway.Utilities.ShowMessage("BetterAI_Scheduler",
+                    $"Scheduler initialized: {Entity.DisplayName}");
+            }
+            catch (Exception ex)
+            {
+                Log.Error("InitializeScheduler", ex);
+            }
+        }
+
+        private void LoadConfiguration()
+        {
+            try
+            {
+                if (Entity.Storage != null)
                 {
-                    // Main update loop
-                    if (isEnabled)
+                    var storage = Entity.Storage.GetValue(Guid.Parse("12345678-1234-1234-1234-123456789012"));
+                    if (!string.IsNullOrEmpty(storage))
                     {
-                        UpdateAI();
-                    }
-                    else
-                    {
-                        navigationManager?.StopAllMovement();
-                    }
-
-                    displayManager?.UpdateDisplay();
-
-                    // Periodic status broadcast
-                    if (tickCounter % 600 == 0) // Every 60 seconds
-                    {
-                        displayManager?.BroadcastStatusUpdate();
+                        // Parse configuration from storage
+                        // This would load operationMode, workModes, etc.
+                        ParseConfiguration(storage);
                     }
                 }
             }
             catch (Exception ex)
             {
-                displayManager?.ShowError($"Update error: {ex.Message}");
-                LogError("Update", ex);
-                currentState = AIState.Error;
+                Log.Error("LoadConfiguration", ex);
+                // Use default configuration on error
             }
         }
 
-        #region Initialization
-
-
-        public List<IMyBatteryBlock> GetBatteries() => batteries;
-        public List<IMyGasTank> GetHydrogenTanks() => hydrogenTanks;
-        public bool NeedsBatteryRecharge() => needsBatteryRecharge;
-        public bool NeedsHydrogenRefuel() => needsHydrogenRefuel;
-
-        private void InitializeComponents()
+        private void SaveConfiguration()
         {
-            List<IMySlimBlock> blocks = new List<IMySlimBlock>();
-            shipController.CubeGrid.GetBlocks(blocks);
-
-            gyroscopes.Clear();
-            thrusters.Clear();
-            sensors.Clear();
-            hydrogenTanks.Clear();
-            batteries.Clear();
-
-            foreach (IMySlimBlock block in blocks)
+            try
             {
-                var functionalBlock = block.FatBlock;
-
-                if (functionalBlock is IMyShipConnector && connector == null)
-                    connector = (IMyShipConnector)functionalBlock;
-                else if (functionalBlock is IMyShipWelder && welder == null)
-                    welder = (IMyShipWelder)functionalBlock;
-                else if (functionalBlock is IMyShipGrinder && grinder == null)
-                    grinder = (IMyShipGrinder)functionalBlock;
-                else if (functionalBlock is IMyGyro)
-                    gyroscopes.Add((IMyGyro)functionalBlock);
-                else if (functionalBlock is IMyThrust)
-                    thrusters.Add((IMyThrust)functionalBlock);
-                else if (functionalBlock is IMySensorBlock)
-                    sensors.Add((IMySensorBlock)functionalBlock);
-                else if (functionalBlock is IMyGasTank)
+                if (Entity.Storage == null)
                 {
-                    // Check if it's a hydrogen tank
-                    var gasTank = (IMyGasTank)functionalBlock;
-                    if (gasTank.BlockDefinition.SubtypeName.Contains("Hydrogen") ||
-                        gasTank.DisplayNameText.Contains("Hydrogen") || gasTank.DisplayNameText.Contains("H2"))
-                        hydrogenTanks.Add(gasTank);
+                    Entity.Storage = new MyModStorageComponent();
                 }
-                else if (functionalBlock is IMyBatteryBlock)
-                    batteries.Add((IMyBatteryBlock)functionalBlock);
+
+                var configString = SerializeConfiguration();
+                Entity.Storage.SetValue(Guid.Parse("12345678-1234-1234-1234-123456789012"), configString);
             }
-
-            CheckCapabilities();
-        }
-
-        private bool CheckCapabilities()
-        {
-
-            var componentErrors = new List<string>();
-            if (connector == null) componentErrors.Add("No Connector found");
-            if (config.GrindBlocks && grinder == null) componentErrors.Add("No Grinder found");
-            if ((config.WeldUnfinishedBlocks || config.WeldProjectedBlocks || config.RepairDamagedBlocks) && welder == null)
-                componentErrors.Add("No welder found");
-            if (gyroscopes.Count == 0) componentErrors.Add("No gyroscopes found");
-            if (thrusters.Count == 0) componentErrors.Add("No thrusters found");
-            if (config.MonitorHydrogenLevels && hydrogenTanks.Count == 0)
+            catch (Exception ex)
             {
-                componentErrors.Add("No Hydrogen tanks found");
-            }
-            if (config.MonitorBatteryLevels && batteries.Count == 0)
-            {
-                componentErrors.Add("No batteries found");
-                capabilitiesValid = false;
-                return false;
-            }
-
-            if (componentErrors.Count > 0)
-            {
-                statusMessage = $"{string.Join(", ", componentErrors)}";
-                displayManager?.ShowError($"Component errors: {string.Join(", ", componentErrors)}");
-                capabilitiesValid = false;
-                return false;
-            }
-
-            CalculateOffsets();
-            CalculateThrust();
-            CalculateMaxLoad();
-            capabilitiesValid = true;
-            return true;
-        }
-
-        #endregion
-
-        #region AI State Machine
-
-        private void UpdateAI()
-        {
-            // Always check power levels first
-            CheckPowerLevels();
-
-            switch (currentState)
-            {
-                case AIState.Initializing:
-                    HandleInitializing();
-                    break;
-                case AIState.Standby:
-                    HandleStandby();
-                    break;
-                case AIState.ScanningTargets:
-                    HandleScanningTargets();
-                    break;
-                case AIState.NavigatingToTarget:
-                    HandleNavigatingToTarget();
-                    break;
-                case AIState.Welding:
-                    HandleWelding();
-                    break;
-                case AIState.Grinding:
-                    HandleGrinding();
-                    break;
-                case AIState.ReturningToBase:
-                    HandleReturningToBase();
-                    break;
-                case AIState.Docking:
-                    HandleDocking();
-                    break;
-                case AIState.RefuelingHydrogen:
-                case AIState.RefuelingBattery:
-                    HandleRefueling();
-                    break;
-                case AIState.Error:
-                    HandleError();
-                    break;
+                Log.Error("SaveConfiguration", ex);
             }
         }
 
-        private void HandleInitializing()
+        private void ParseConfiguration(string config)
         {
-            if (CheckCapabilities())
+            // Parse configuration string
+            // Format: "OperationMode=Orchestrator;WorkModes=WeldUnfinishedBlocks,RepairDamagedBlocks"
+            var parts = config.Split(';');
+            foreach (var part in parts)
             {
-                currentState = AIState.Standby;
-                statusMessage = "AI Ready - Awaiting orders";
-                displayManager?.ShowSuccess("Construction AI initialized successfully");
-            }
-            else
-            {
-                currentState = AIState.Error;
-            }
-        }
+                var kvp = part.Split('=');
+                if (kvp.Length != 2)
+                    continue;
 
-        private void HandleStandby()
-        {
-            statusMessage = "Standby - Ready for orders";
+                var key = kvp[0].Trim();
+                var value = kvp[1].Trim();
 
-            // Check if we need to refuel before starting work
-            if (ShouldRefuel())
-            {
-                if (needsHydrogenRefuel && needsBatteryRecharge)
-                    currentState = AIState.RefuelingHydrogen; // Handle both, but start with hydrogen
-                else if (needsHydrogenRefuel)
-                    currentState = AIState.RefuelingHydrogen;
-                else if (needsBatteryRecharge)
-                    currentState = AIState.RefuelingBattery;
-
-                statusMessage = $"Low {GetRefuelReason()} - returning to base";
-                return;
-            }
-
-            if (ShouldStartScanning())
-            {
-                currentState = AIState.ScanningTargets;
-                statusMessage = "Scanning for construction targets...";
-            }
-        }
-
-        private bool ShouldStartScanning()
-        {
-            return isEnabled &&
-                   (config.WeldUnfinishedBlocks || config.RepairDamagedBlocks || config.WeldProjectedBlocks || config.GrindBlocks) &&
-                   (welder != null || grinder != null);
-        }
-
-        private void HandleScanningTargets()
-        {
-            ScanForUnfinishedBlocks();
-
-            if (targetBlocks.Count > 0)
-            {
-                currentTargetIndex = 0;
-                currentTargetPosition = GetBlockWorldPosition(targetBlocks[0]);
-                CalculatePathToTarget();
-
-                currentState = AIState.NavigatingToTarget;
-                statusMessage = $"Found {targetBlocks.Count} targets - navigating to first";
-                displayManager?.ShowInfo($"Beginning construction of {targetBlocks.Count} unfinished blocks");
-
-                if (connector?.IsConnected == true)
-                    connector.Disconnect();
-            }
-            else
-            {
-                currentState = AIState.Standby;
-                statusMessage = "No construction targets found";
-                displayManager?.ShowSuccess("All blocks complete - standing by");
-            }
-        }
-
-        private void HandleNavigatingToTarget()
-        {
-            // Check if we need to refuel while working
-            if (ShouldRefuel())
-            {
-                currentState = AIState.ReturningToBase;
-                statusMessage = $"Low {GetRefuelReason()} - aborting work to refuel";
-                return;
-            }
-
-            var currentPos = GetPosition();
-            var distanceToTarget = Vector3D.Distance(currentPos, currentTargetPosition);
-
-            // Use navigation manager for pathfinding and movement
-            var maxSpeed = distanceToTarget < 10.0 ? config.MaxApproachSpeed : config.MaxTravelSpeed;
-            navigationManager.NavigateToPosition(currentTargetPosition, maxSpeed);
-
-            // Check if we've reached the target
-            if (distanceToTarget < config.WaypointTolerance)
-            {
-                displayManager?.ShowSuccess("Arrived at target block");
-
-                var targetBlock = targetBlocks[currentTargetIndex];
-                if (targetBlock.BuildLevelRatio < 1.0f || targetBlock.CurrentDamage > 0)
+                switch (key)
                 {
-                    currentState = AIState.Welding;
-                }
-                else if (config.GrindBlocks)
-                {
-                    currentState = AIState.Grinding;
-                }
-            }
-
-            statusMessage = $"Navigating to target ({distanceToTarget:F1}m away)";
-        }
-
-        private void HandleWelding()
-        {
-            // Check if we need to refuel while working
-            if (ShouldRefuel())
-            {
-                if (welder?.Enabled == true) welder.Enabled = false;
-                currentState = AIState.ReturningToBase;
-                statusMessage = $"Low {GetRefuelReason()} - aborting welding to refuel";
-                return;
-            }
-
-            // Existing welding logic remains the same...
-            if (welder == null)
-            {
-                displayManager?.ShowError("No welder available");
-                currentState = AIState.Error;
-                return;
-            }
-
-            var targetBlock = targetBlocks[currentTargetIndex];
-            var currentPos = GetPosition();
-            var targetPos = GetBlockWorldPosition(targetBlock);
-            var distance = Vector3D.Distance(currentPos, targetPos);
-
-            // Position for welding
-            var optimalPos = targetPos - Vector3D.Transform(welderOffset, WorldMatrix);
-            navigationManager.NavigateToPosition(optimalPos, 1.0);
-
-            if (distance < 5.0)
-            {
-                navigationManager.OrientTowardsTarget(targetPos);
-
-                if (!welder.Enabled)
-                    welder.Enabled = true;
-
-                if (targetBlock.BuildLevelRatio >= 1.0f && targetBlock.CurrentDamage <= 0)
-                {
-                    welder.Enabled = false;
-                    displayManager?.ShowSuccess("Block welding completed");
-                    MoveToNextTarget();
-                }
-                else
-                {
-                    statusMessage = $"Grinding block... {(1 - targetBlock.BuildLevelRatio) * 100:F1}% complete";
-                }
-            }
-            else
-            {
-                statusMessage = $"Approaching grinding position ({distance:F1}m)";
-            }
-        }
-
-        private void HandleGrinding()
-        {
-            if (ShouldRefuel())
-            {
-                if (welder?.Enabled == true) welder.Enabled = false;
-                currentState = AIState.ReturningToBase;
-                statusMessage = $"Low {GetRefuelReason()} - aborting welding to refuel";
-                return;
-            }
-            if (grinder == null)
-            {
-                displayManager?.ShowError("No grinder available");
-                currentState = AIState.Error;
-                return;
-            }
-
-            var targetBlock = targetBlocks[currentTargetIndex];
-            var currentPos = GetPosition();
-            var targetPos = GetBlockWorldPosition(targetBlock);
-            var distance = Vector3D.Distance(currentPos, targetPos);
-
-            var optimalPos = targetPos - Vector3D.Transform(grinderOffset, WorldMatrix);
-            navigationManager.NavigateToPosition(optimalPos, 1.0);
-
-            if (distance < 5.0)
-            {
-                navigationManager.OrientTowardsTarget(targetPos);
-
-                if (!grinder.Enabled)
-                    grinder.Enabled = true;
-
-                if (targetBlock.IsDestroyed || targetBlock.BuildLevelRatio <= 0)
-                {
-                    grinder.Enabled = false;
-                    displayManager?.ShowSuccess("Block grinding completed");
-                    MoveToNextTarget();
-                }
-                else
-                {
-                    statusMessage = $"Grinding block... {(1 - targetBlock.BuildLevelRatio) * 100:F1}% complete";
-                }
-            }
-            else
-            {
-                statusMessage = $"Approaching grinding position ({distance:F1}m)";
-            }
-        }
-
-        private void HandleRefueling()
-        {
-            if (connector == null)
-            {
-                displayManager?.ShowError("No connector available for refueling");
-                currentState = AIState.Error;
-                return;
-            }
-
-            var connectorPos = connector.WorldMatrix.Translation;
-            var currentPos = GetPosition();
-            var distance = Vector3D.Distance(currentPos, connectorPos);
-
-            // If not connected, navigate to and dock
-            if (!connector.IsConnected)
-            {
-                if (distance > 10.0)
-                {
-                    navigationManager.NavigateToPosition(connectorPos, config.MaxApproachSpeed);
-                    statusMessage = $"Returning to base for {GetRefuelReason().ToLower()} refuel ({distance:F1}m away)";
-                }
-                else
-                {
-                    // Close enough to dock
-                    var dockingPos = connectorPos + Vector3D.Transform(connectorOffset, WorldMatrix);
-                    navigationManager.NavigateToPosition(dockingPos, config.MaxApproachSpeed * 0.2);
-                    navigationManager.OrientTowardsTarget(connectorPos);
-
-                    if (distance < 0.5)
-                    {
-                        connector.Connect();
-                    }
-                    statusMessage = $"Docking for {GetRefuelReason().ToLower()} refuel...";
-                }
-                return;
-            }
-
-            // Connected - check if refueling is complete
-            var hydrogenReady = !needsHydrogenRefuel || GetHydrogenPercentage() >= config.HydrogenOperationalThreshold;
-            var batteryReady = !needsBatteryRecharge || GetBatteryPercentage() >= config.BatteryOperationalThreshold;
-
-            if (hydrogenReady && batteryReady)
-            {
-                // Refueling complete
-                needsHydrogenRefuel = false;
-                needsBatteryRecharge = false;
-                currentState = AIState.Standby;
-                statusMessage = "Refueling complete - standing by";
-                displayManager?.ShowSuccess($"Refueling complete - H2: {GetHydrogenPercentage():F1}%, Battery: {GetBatteryPercentage():F1}%");
-            }
-            else
-            {
-                // Still refueling
-                var refuelStatus = new List<string>();
-                if (!hydrogenReady) refuelStatus.Add($"H2: {GetHydrogenPercentage():F1}%/{config.HydrogenOperationalThreshold:F1}%");
-                if (!batteryReady) refuelStatus.Add($"Battery: {GetBatteryPercentage():F1}%/{config.BatteryOperationalThreshold:F1}%");
-                statusMessage = $"Refueling... {string.Join(", ", refuelStatus)}";
-            }
-        }
-
-        private void HandleReturningToBase()
-        {
-            if (connector == null)
-            {
-                currentState = AIState.Standby;
-                statusMessage = "No connector - returning to standby";
-                return;
-            }
-
-            var connectorPos = connector.WorldMatrix.Translation;
-            var currentPos = GetPosition();
-            var distance = Vector3D.Distance(currentPos, connectorPos);
-
-            navigationManager.NavigateToPosition(connectorPos, config.MaxApproachSpeed);
-
-            if (distance < 10.0)
-            {
-                currentState = AIState.Docking;
-                statusMessage = "Preparing to dock";
-            }
-            else
-            {
-                statusMessage = $"Returning to base ({distance:F1}m away)";
-            }
-        }
-
-        private void HandleDocking()
-        {
-            if (connector == null)
-            {
-                currentState = AIState.Standby;
-                return;
-            }
-
-            var dockingPos = connector.WorldMatrix.Translation + Vector3D.Transform(connectorOffset, WorldMatrix);
-            var currentPos = GetPosition();
-            var distance = Vector3D.Distance(currentPos, dockingPos);
-
-            navigationManager.NavigateToPosition(dockingPos, config.MaxApproachSpeed * 0.2); // Very slow docking
-            navigationManager.OrientTowardsTarget(connector.WorldMatrix.Translation);
-
-            if (distance < 0.5 && !connector.IsConnected)
-            {
-                connector.Connect();
-            }
-
-            if (connector.IsConnected)
-            {
-                navigationManager.StopAllMovement();
-
-                // Check if we need to refuel after docking
-                if (ShouldRefuel())
-                {
-                    if (needsHydrogenRefuel && needsBatteryRecharge)
-                        currentState = AIState.RefuelingHydrogen;
-                    else if (needsHydrogenRefuel)
-                        currentState = AIState.RefuelingHydrogen;
-                    else if (needsBatteryRecharge)
-                        currentState = AIState.RefuelingBattery;
-
-                    statusMessage = $"Docked - beginning {GetRefuelReason().ToLower()} refuel";
-                }
-                else
-                {
-                    currentState = AIState.Standby;
-                    statusMessage = "Docked successfully - standing by";
-                    displayManager?.ShowSuccess("Construction cycle completed - docked at base");
-                }
-            }
-            else
-            {
-                statusMessage = $"Docking... ({distance:F1}m from connector)";
-            }
-        }
-
-        private void HandleError()
-        {
-            consecutiveErrors++;
-
-            if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS)
-            {
-                // Enter safe mode - minimal operations only
-                navigationManager?.StopAllMovement();
-                statusMessage = "Critical errors - entering safe mode";
-
-                // Try to dock if possible
-                if (connector != null && !connector.IsConnected)
-                {
-                    var dockingPos = connector.WorldMatrix.Translation;
-                    var distance = Vector3D.Distance(GetPosition(), dockingPos);
-                    if (distance < 100.0) // Only if reasonably close
-                    {
-                        currentState = AIState.ReturningToBase;
-                        consecutiveErrors = 0; // Reset on recovery attempt
-                    }
-                }
-            }
-            else
-            {
-                // Normal error handling
-                navigationManager?.StopAllMovement();
-                statusMessage = $"Error state - attempt {consecutiveErrors}/{MAX_CONSECUTIVE_ERRORS}";
-
-                // Try to recover every 30 seconds instead of 60
-                if (tickCounter % 300 == 0)
-                {
-                    if (CheckCapabilities())
-                    {
-                        currentState = AIState.Standby;
-                        consecutiveErrors = 0;
-                        displayManager?.ShowInfo("Recovered from error state");
-                    }
+                    case "OperationMode":
+                        Enum.TryParse<SchedulerOperationMode>(value, out operationMode);
+                        break;
+                    case "WorkModes":
+                        ParseWorkModes(value);
+                        break;
                 }
             }
         }
 
-        private void MoveToNextTarget()
+        private void ParseWorkModes(string value)
         {
-            currentTargetIndex++;
-            if (currentTargetIndex < targetBlocks.Count)
+            workModes = WorkModes.None;
+            var modes = value.Split(',');
+            foreach (var mode in modes)
             {
-                currentTargetPosition = GetBlockWorldPosition(targetBlocks[currentTargetIndex]);
-                CalculatePathToTarget();
-                currentState = AIState.NavigatingToTarget;
-                statusMessage = $"Moving to next target ({currentTargetIndex + 1}/{targetBlocks.Count})";
-            }
-            else
-            {
-                currentState = AIState.ReturningToBase;
-                statusMessage = "All targets completed - returning to base";
-            }
-        }
-
-        #endregion
-
-        #region Calculations and Utilities
-
-        private void CalculateOffsets()
-        {
-            var aiPos = shipController.CubeGrid.GridIntegerToWorld(shipController.Position);
-            bool isLargeGrid = shipController.CubeGrid.GridSizeEnum == MyCubeSize.Large;
-            float activeRadius = isLargeGrid ? 2.0f : 1.5f;
-            float centerOffset = isLargeGrid ? 2.5f : 1.5f;
-
-            if (welder != null)
-            {
-                var sphereCenter = welder.WorldMatrix.Translation + welder.WorldMatrix.Forward * centerOffset;
-                var activeSphereEdge = sphereCenter + welder.WorldMatrix.Forward * activeRadius;
-                welderOffset = Vector3D.Transform(activeSphereEdge - aiPos, MatrixD.Transpose(shipController.WorldMatrix));
-            }
-
-            if (grinder != null)
-            {
-                var sphereCenter = grinder.WorldMatrix.Translation + grinder.WorldMatrix.Forward * centerOffset;
-                var activeSphereEdge = sphereCenter + grinder.WorldMatrix.Forward * activeRadius;
-                grinderOffset = Vector3D.Transform(activeSphereEdge - aiPos, MatrixD.Transpose(shipController.WorldMatrix));
-            }
-
-            if (connector != null)
-            {
-                var connectorEdge = connector.WorldMatrix.Translation + connector.WorldMatrix.Forward * 0.25f;
-                connectorOffset = Vector3D.Transform(connectorEdge - aiPos, MatrixD.Transpose(shipController.WorldMatrix));
-            }
-        }
-
-        private void CalculateThrust()
-        {
-            thrustData = new ThrustData();
-            foreach (var thruster in thrusters)
-            {
-                Vector3I thrustDirection = thruster.GridThrustDirection;
-
-                if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Forward))
-                    thrustData.Forward += thruster.MaxEffectiveThrust;
-                else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Backward))
-                    thrustData.Backward += thruster.MaxEffectiveThrust;
-                else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Up))
-                    thrustData.Up += thruster.MaxEffectiveThrust;
-                else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Down))
-                    thrustData.Down += thruster.MaxEffectiveThrust;
-                else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Left))
-                    thrustData.Left += thruster.MaxEffectiveThrust;
-                else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Right))
-                    thrustData.Right += thruster.MaxEffectiveThrust;
-            }
-
-            maxThrust = thrustData.GetMaxThrust();
-        }
-
-        private void CalculateMaxLoad()
-        {
-            var mass = shipController.CalculateShipMass();
-            var gravity = shipController.GetNaturalGravity();
-            var gravityStrength = gravity.Length();
-
-            if (gravityStrength > 0)
-            {
-                var requiredThrustForHover = mass.PhysicalMass * gravityStrength;
-                currentLoad = mass.TotalMass - mass.BaseMass;
-                maxLoad = (float)((thrustData.Up - requiredThrustForHover) / gravityStrength);
-            }
-            else
-            {
-                maxLoad = thrustData.GetMinThrust() / 2.0f;
-            }
-
-            maxLoad = Math.Max(0, maxLoad);
-        }
-
-        private void CalculatePathToTarget()
-        {
-            var startPos = GetPosition();
-            var path = CalculatePath(startPos, currentTargetPosition);
-            navigationManager?.SetPath(path);
-        }
-
-        private List<Vector3D> CalculatePath(Vector3D start, Vector3D end)
-        {
-            var context = new PathfindingContext
-            {
-                Controller = this,
-                Sensors = sensors,
-                GravityVector = shipController.GetNaturalGravity(),
-                ThrustData = thrustData,
-                ShipMass = shipController.CalculateShipMass().TotalMass,
-                MaxThrust = maxThrust,
-                MaxLoad = maxLoad,
-                WaypointDistance = BlockWaypointDistance,
-                CubeGrid = shipController.CubeGrid
-            };
-
-            return pathfindingManager.CalculatePath(start, end, context);
-        }
-
-        private void ScanForUnfinishedBlocks()
-        {
-            targetBlocks.Clear();
-            var scannedBlocks = 0;
-            const int MAX_BLOCKS_PER_SCAN = 50; // Limit blocks scanned per update
-
-            List<IMyCubeGrid> connectedGrids = new List<IMyCubeGrid>();
-            MyAPIGateway.GridGroups.GetGroup(shipController.CubeGrid, GridLinkTypeEnum.Physical, connectedGrids);
-
-            foreach (var grid in connectedGrids)
-            {
-                var blocks = new List<IMySlimBlock>();
-                grid.GetBlocks(blocks);
-
-                foreach (var block in blocks)
+                WorkModes parsedMode;
+                if (Enum.TryParse<WorkModes>(mode.Trim(), out parsedMode))
                 {
-                    scannedBlocks++;
-                    if (scannedBlocks > MAX_BLOCKS_PER_SCAN)
-                    {
-                        // Continue scanning next update
-                        return;
-                    }
-
-                    if (ShouldTargetBlock(block))
-                    {
-                        targetBlocks.Add(block);
-                        if (targetBlocks.Count >= targetBlockLimit)
-                            return;
-                    }
+                    workModes |= parsedMode;
                 }
             }
-
-            SortTargetBlocks(TargetSorting.ClosestFirst);
-        }
-        private bool ShouldTargetBlock(IMySlimBlock block)
-        {
-            if (config.WeldUnfinishedBlocks && block.BuildLevelRatio < 1.0f)
-                return true;
-            if (config.RepairDamagedBlocks && block.CurrentDamage > 0.0f)
-                return true;
-            // Add projected block logic here
-            return false;
         }
 
-        private void SortTargetBlocks(TargetSorting method)
+        private string SerializeConfiguration()
         {
-            var aiPos = GetPosition();
-            if (method == TargetSorting.ClosestFirst)
+            return $"OperationMode={operationMode};WorkModes={workModes}";
+        }
+
+        /// <summary>
+        /// Sets the scheduler operation mode
+        /// </summary>
+        public void SetOperationMode(SchedulerOperationMode mode)
+        {
+            operationMode = mode;
+            if (scheduler != null)
             {
-                targetBlocks.Sort((a, b) =>
-                {
-                    var distA = Vector3D.DistanceSquared(GetBlockWorldPosition(a), aiPos);
-                    var distB = Vector3D.DistanceSquared(GetBlockWorldPosition(b), aiPos);
-                    return distA.CompareTo(distB);
-                });
+                scheduler.operationMode = mode;
             }
-            else if (method == TargetSorting.FurthestFirst)
-            {
-                targetBlocks.Sort((a, b) =>
-                {
-                    var distA = Vector3D.DistanceSquared(GetBlockWorldPosition(a), aiPos);
-                    var distB = Vector3D.DistanceSquared(GetBlockWorldPosition(b), aiPos);
-                    return distB.CompareTo(distA);
-                });
-            }
+            SaveConfiguration();
         }
 
-        private Vector3D GetBlockWorldPosition(IMySlimBlock block)
+        /// <summary>
+        /// Sets the work modes for the scheduler
+        /// </summary>
+        public void SetWorkModes(WorkModes modes)
         {
-            return block.CubeGrid.GridIntegerToWorld(block.Position);
-        }
-
-        #endregion
-
-        #region Utility Methods
-
-        private void LogError(string context, Exception ex)
-        {
-            var message = $"[{context}] {ex.Message}\n{ex.StackTrace}";
-            var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage("error.log", typeof(BAISession));
-            if (writer != null)
+            workModes = modes;
+            if (scheduler != null)
             {
-                writer.Write(message.ToString());
-                writer.Flush();
+                scheduler.workModes = modes;
             }
-            writer.Close();
+            SaveConfiguration();
         }
 
-        #endregion
+        /// <summary>
+        /// Enables or disables the scheduler
+        /// </summary>
+        public void SetEnabled(bool enabled)
+        {
+            if (scheduler != null)
+            {
+                scheduler.isEnabled = enabled;
+            }
+        }
 
+        /// <summary>
+        /// Gets diagnostic information about the scheduler
+        /// </summary>
+        public string GetDiagnostics()
+        {
+            if (scheduler != null)
+            {
+                return scheduler.GetErrorDiagnostics();
+            }
+            return "Scheduler not initialized";
+        }
 
+        /// <summary>
+        /// Resets the scheduler to initial state
+        /// </summary>
+        public void Reset()
+        {
+            if (scheduler != null)
+            {
+                scheduler.ResetScheduler();
+            }
+        }
 
         public override void MarkForClose()
         {
             try
             {
-                // Stop all movement
-                navigationManager?.StopAllMovement();
+                // Clean shutdown
+                if (scheduler != null)
+                {
+                    // The scheduler should handle its own cleanup
+                    scheduler.ResetScheduler();
+                }
 
-                // Clear collections to help GC
-                targetBlocks?.Clear();
-                thrusters?.Clear();
-                gyroscopes?.Clear();
-                sensors?.Clear();
+                // Save configuration before closing
+                SaveConfiguration();
 
-                // Dispose of managers
-                navigationManager = null;
-                displayManager = null;
-                pathfindingManager = null;
+                // Clear references
+                scheduler = null;
 
-                // Save and cleanup
-                SaveConfig();
-                BAISession.Instance?.UnregisterAIConstructor(Entity.EntityId);
+                MyAPIGateway.Utilities.ShowMessage("ImprovedAIScheduler", $"Scheduler closed: {Entity?.DisplayName}");
             }
             catch (Exception ex)
             {
-                LogError("Close", ex);
+                Log.Error("MarkForClose", ex);
             }
         }
-
-        #region BAIController Implementation
-
-        public AIState GetCurrentState() => currentState;
-        public string GetStatusMessage() => statusMessage;
-        public void SetStatusMessage(string message) => statusMessage = message;
-        public bool IsEnabled => isEnabled;
-        public void SetEnabled(bool enabled) => isEnabled = enabled;
-        public bool AreCapabilitiesValid() => capabilitiesValid;
-
-        public BAIConstructorDroneConfig GetConfig() => config;
-
-        public void SaveConfig()
-        {
-            try
-            {
-                config.SaveToIni(configIni);
-                if (Entity.Storage == null)
-                    Entity.Storage = new MyModStorageComponent();
-                Entity.Storage.SetValue(Guid.Parse("89afa424-d317-41de-992c-be2854c2f158"), configIni.ToString());
-            }
-            catch (Exception ex)
-            {
-                LogError("SaveConfig", ex);
-            }
-        }
-
-        public IMyCubeGrid CubeGrid => shipController.CubeGrid;
-        public MatrixD WorldMatrix => shipController.WorldMatrix;
-        public Vector3D GetPosition() => shipController.CubeGrid.GridIntegerToWorld(shipController.Position);
-        public float GetCurrentMass() => shipController.CalculateShipMass().TotalMass;
-        public Vector3D GetNaturalGravity() => shipController.GetNaturalGravity();
-        public List<IMyThrust> GetThrusters() => thrusters;
-        public List<IMyGyro> GetGyroscopes() => gyroscopes;
-        public List<IMySensorBlock> GetSensors() => sensors;
-        public ThrustData GetThrustData() => thrustData;
-        public double GetMaxThrust() => maxThrust;
-        public float GetMaxLoad() => maxLoad;
-        public float GetCurrentLoad() => currentLoad;
-        public List<IMySlimBlock> GetTargetBlocks() => targetBlocks;
-        public int GetCurrentTargetIndex() => currentTargetIndex;
-        public NavigationManager GetNavigationManager() => navigationManager;
-        public IMyShipWelder GetWelder() => welder;
-        public IMyShipGrinder GetGrinder() => grinder;
-        public IMyShipConnector GetConnector() => connector;
-
-        #endregion
     }
 }

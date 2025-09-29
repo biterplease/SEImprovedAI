@@ -1,20 +1,15 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Messages;
 using ImprovedAI.Network;
-using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using VRage.Game;
-using VRage.Game.Components;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
-using VRage.ObjectBuilders;
 using VRageMath;
 
-namespace ImprovedAI.Logistics
+namespace ImprovedAI
 {
     public enum LogisticsState : byte
     {
@@ -30,7 +25,7 @@ namespace ImprovedAI.Logistics
         Requester = 2
     }
 
-    public class LogisticsComputer
+    public class IAILogisticsComputer
     {
         private readonly long entityId;
         private readonly IMyEntity entity;
@@ -65,7 +60,7 @@ namespace ImprovedAI.Logistics
         private readonly int INVENTORY_SCAN_INTERVAL_TICKS = 180;
         private readonly int PUSH_CHECK_INTERVAL_TICKS = 300; // Check for excess every 5 seconds
 
-        public LogisticsComputer(IMyEntity entity, MessageQueue messaging, LogisticsOperationMode operationMode = LogisticsOperationMode.Provider)
+        public IAILogisticsComputer(IMyEntity entity, MessageQueue messaging, LogisticsOperationMode operationMode = LogisticsOperationMode.Provider)
         {
             this.entity = entity;
             this.entityId = entity.EntityId;

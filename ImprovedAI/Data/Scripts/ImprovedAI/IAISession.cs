@@ -1,6 +1,7 @@
-﻿using BetterAIConstructor.Config;
-using BetterAIConstructor.UI;
+﻿using BetterAIConstructor.UI;
 using ImprovedAI.Config;
+using ImprovedAI.Logistics;
+using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
 using System;
@@ -11,125 +12,122 @@ using VRage.Utils;
 namespace ImprovedAI
 {
     [MySessionComponentDescriptor(MyUpdateOrder.BeforeSimulation)]
-    public class IAISession: MySessionComponentBase
+    public class IAISession : MySessionComponentBase
     {
         public static IAISession Instance;
 
+        // Shared message queue for all AI components
+        public MessageQueue MessageQueue { get; private set; }
+
         // Mod-wide settings and management
         private bool isInitialized = false;
+        private long _lastUpdateFrame = 0;
+        private int _updateInterval = ServerConfig.Session.UpdateInterval;
         private int updateCounter = 0;
         private const int UPDATE_INTERVAL = 60;
         private static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
 
-
-
-        // Collection of all AI Constructor blocks in the world
+        // Collection of all AI blocks in the world
         public Dictionary<long, IAIDroneBlock> AIDroneControllers = new Dictionary<long, IAIDroneBlock>();
         public Dictionary<long, IAISchedulerBlock> AIDroneSchedulers = new Dictionary<long, IAISchedulerBlock>();
+        public Dictionary<long, IAILogisticsComputer> AILogisticsComputers = new Dictionary<long, IAILogisticsComputer>();
 
         public override void LoadData()
         {
             Instance = this;
-            Log.Info("Mod loaded successfully");
         }
 
-        public override void BeforeStart()
+        public void Init()
         {
-            try
-            {
-                // Initialize terminal controls for both client and server
-                TerminalControls.Initialize();
-                Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
+            Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
+            MessageQueue = MessageQueue.Instance;
+            ServerConfig.LoadConfig();
+            Log.Info("Mod loaded successfully");
 
-                if (MyAPIGateway.Session.IsServer)
-                {
-                    // Server-specific initialization
-                    ServerConfig.LoadConfig();
-                    Log.Info("Session initialized on server");
-                }
-                else
-                {
-                    // Client-specific initialization
-                    Log.Info("Session initialized on client");
-                }
-
-                isInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                MyAPIGateway.Utilities.ShowMessage("BetterAIConstructor", $"Initialization error: {ex.Message}");
-                MyLog.Default.WriteLine($"BetterAIConstructor: BeforeStart exception: {ex}");
-
-                var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage("error.log", typeof(IAISession));
-                if (writer != null)
-                {
-                    writer.Write(ex.ToString());
-                    writer.Flush();
-                    writer.Close();
-                }
-            }
+            isInitialized = true;
         }
+
 
         public override void UpdateBeforeSimulation()
         {
             try
             {
                 if (!isInitialized)
-                    return;
-
-                // Only run AI logic on server
-                if (!MyAPIGateway.Session.IsServer)
-                    return;
-
-                updateCounter++;
-
-                if (updateCounter % UPDATE_INTERVAL == 0)
                 {
+                    if (MyAPIGateway.Session == null) return;
+                    Init();
+                }
+                else
+                {
+
+                    var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
+                    if (currentFrame - _lastUpdateFrame < _updateInterval)
+                        return;
+
+                    _lastUpdateFrame = currentFrame;
+
                     // Periodic cleanup and maintenance
                     CleanupInvalidBlocks();
 
-                    // Optional: Log active AI Constructor count
+                    // Optional: Log active AI block counts
                     if (updateCounter % (UPDATE_INTERVAL * 10) == 0) // Every 10 seconds
                     {
-                        Log.Info("Active AI Drone Schedulers: {0}", AIDroneSchedulers.Count);
-                        Log.Info("Active AI Drone Controllers: {0}", AIDroneSchedulers.Count);
+                        Log.Verbose("Active AI Drone Schedulers: {0}", AIDroneSchedulers.Count);
+                        Log.Verbose("Active AI Drone Controllers: {0}", AIDroneControllers.Count);
+                        Log.Verbose("Active AI Logistics Computers: {0}", AILogisticsComputers.Count);
                     }
                 }
+
             }
             catch (Exception ex)
             {
-                MyAPIGateway.Utilities.ShowMessage("BetterAIConstructor", $"Update error: {ex.Message}");
-                MyLog.Default.WriteLine($"BetterAIConstructor: UpdateBeforeSimulation exception: {ex}");
+                MyAPIGateway.Utilities.ShowMessage("ImprovedAI", $"Update error: {ex.Message}");
+                MyLog.Default.WriteLine($"ImprovedAI: UpdateBeforeSimulation exception: {ex}");
             }
         }
 
         private void CleanupInvalidBlocks()
         {
-            var toRemove = new List<long>();
+            var schedulersToRemove = new List<long>();
             foreach (var kvp in AIDroneSchedulers)
             {
                 if (kvp.Value?.Entity == null || kvp.Value.Entity.MarkedForClose)
                 {
-                    toRemove.Add(kvp.Key);
+                    schedulersToRemove.Add(kvp.Key);
                 }
             }
 
-            foreach (var entityId in toRemove)
+            foreach (var entityId in schedulersToRemove)
             {
                 AIDroneSchedulers.Remove(entityId);
             }
+
             var controllersToRemove = new List<long>();
             foreach (var kvp in AIDroneControllers)
             {
                 if (kvp.Value?.Entity == null || kvp.Value.Entity.MarkedForClose)
                 {
-                    toRemove.Add(kvp.Key);
+                    controllersToRemove.Add(kvp.Key);
                 }
             }
 
             foreach (var entityId in controllersToRemove)
             {
                 AIDroneControllers.Remove(entityId);
+            }
+
+            var logisticsToRemove = new List<long>();
+            foreach (var kvp in AILogisticsComputers)
+            {
+                if (kvp.Value?.Entity == null || kvp.Value.Entity.MarkedForClose)
+                {
+                    logisticsToRemove.Add(kvp.Key);
+                }
+            }
+
+            foreach (var entityId in logisticsToRemove)
+            {
+                AILogisticsComputers.Remove(entityId);
             }
         }
 
@@ -146,9 +144,10 @@ namespace ImprovedAI
         {
             if (AIDroneSchedulers.Remove(entityId))
             {
-                Log.Info($"Unregistered AI Scheduler: {entityId}");
+                Log.Info("Unregistered AI Scheduler: {0}", entityId);
             }
         }
+
         public void RegisterDroneController(IAIDroneBlock block)
         {
             if (block?.Entity != null)
@@ -162,7 +161,24 @@ namespace ImprovedAI
         {
             if (AIDroneControllers.Remove(entityId))
             {
-                Log.Info($"Unregistered AI Drone controller: {entityId}");
+                Log.Info("Unregistered AI Drone controller: {0}", entityId);
+            }
+        }
+
+        public void RegisterLogisticsComputer(IAILogisticsComputer block)
+        {
+            if (block?.Entity != null)
+            {
+                AILogisticsComputers[block.Entity.EntityId] = block;
+                Log.Info("Registered AI Logistics Computer: {0} {1}", block.Entity.EntityId, block.Entity.DisplayName);
+            }
+        }
+
+        public void UnregisterLogisticsComputer(long entityId)
+        {
+            if (AILogisticsComputers.Remove(entityId))
+            {
+                Log.Info("Unregistered AI Logistics Computer: {0}", entityId);
             }
         }
 
@@ -173,6 +189,10 @@ namespace ImprovedAI
                 // Clean shutdown
                 AIDroneControllers.Clear();
                 AIDroneSchedulers.Clear();
+                AILogisticsComputers.Clear();
+
+                // Reset message queue singleton
+                Network.MessageQueue.Reset();
 
                 // Unload terminal controls
                 TerminalControls.Unload();
@@ -183,7 +203,7 @@ namespace ImprovedAI
             }
             catch (Exception ex)
             {
-                MyLog.Default.WriteLine($"BetterAIConstructor: UnloadData exception: {ex}");
+                MyLog.Default.WriteLine($"ImprovedAI: UnloadData exception: {ex}");
 
                 var writer = MyAPIGateway.Utilities.WriteFileInLocalStorage("shutdown_error.log", typeof(IAISession));
                 if (writer != null)

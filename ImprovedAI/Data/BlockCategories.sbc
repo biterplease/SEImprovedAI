@@ -9,10 +9,11 @@
          <DisplayName>Better AI</DisplayName>
          <Name>Better AI</Name>
          <ItemIds>
-			<string>RemoteControl/BetterAIConstructorSmall</string>
-            <string>RemoteControl/BetterAIConstructorLarge</string>
-            <string>RemoteControl/BetterAIConstructorSmall</string>
-         </ItemIds>
+			<string>RemoteControl/ImprovedAILargeDroneController</string>
+            <string>RemoteControl/ImprovedAISmallDroneController</string>
+			 <string>BroadcastController/ImprovedAILargeScheduler</string>
+			 <string>TimerBlock/ImprovedAILargeLogisticsComputer</string>
+		 </ItemIds>
       </Category>
       
       <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
@@ -23,7 +24,7 @@
          <DisplayName>DisplayName_Category_LargeBlocks</DisplayName>
          <Name>LargeBlocks</Name>
          <ItemIds>
-            <string>RemoteControl/BetterAIConstructorLarge</string>
+            <string>RemoteControl/ImprovedAILargeDroneController</string>
          </ItemIds>
       </Category>
 	   
@@ -38,6 +39,17 @@
 			   <string>BroadcastController/ImprovedAILargeScheduler</string>
 		   </ItemIds>
 	   </Category>
+	   <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
+		   <Id>
+			   <TypeId>GuiBlockCategoryDefinition</TypeId>
+			   <SubtypeId/>
+		   </Id>
+		   <DisplayName>DisplayName_Category_LargeBlocks</DisplayName>
+		   <Name>LargeBlocks</Name>
+		   <ItemIds>
+			   <string>TimerBlock/ImprovedAILargeLogisticsComputer</string>
+		   </ItemIds>
+	   </Category>
       
       <Category xsi:type="MyObjectBuilder_GuiBlockCategoryDefinition">
          <Id>
@@ -47,7 +59,7 @@
          <DisplayName>DisplayName_Category_SmallBlocks</DisplayName>
          <Name>SmallBlocks</Name>
          <ItemIds>
-            <string>RemoteControl/BetterAIConstructorSmall</string>
+            <string>RemoteControl/ImprovedAISmallDroneController</string>
          </ItemIds>
       </Category>
 
