@@ -6,7 +6,7 @@ using VRage.Game.ModAPI;
 using VRageMath;
 
 
-namespace BetterAIConstructor.Pathfinding
+namespace ImprovedAI.Pathfinding
 { 
     public class PathfindingContext
     {

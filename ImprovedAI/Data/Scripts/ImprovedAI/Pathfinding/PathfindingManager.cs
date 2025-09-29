@@ -1,4 +1,4 @@
-﻿using BetterAIConstructor.Config;
+﻿using ImprovedAI.Config;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Linq;
 using VRageMath;
 
-namespace BetterAIConstructor.Pathfinding
+namespace ImprovedAI.Pathfinding
 {
     public class PathfindingManager
     {

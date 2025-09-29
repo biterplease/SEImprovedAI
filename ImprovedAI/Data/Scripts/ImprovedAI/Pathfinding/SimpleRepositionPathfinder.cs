@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using VRageMath;
 
-namespace BetterAIConstructor.Pathfinding
+namespace ImprovedAI.Pathfinding
 {
     public class SimpleRepositioningPathfinder : IPathfinder
     {

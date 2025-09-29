@@ -95,6 +95,8 @@ namespace ImprovedAI.Config
         public static int MaxConsecutiveErrors { get; private set; } = 3;
 
         // Power
+        public static class Drone
+        {
         public static bool DefaultMonitorHydrogen { get; private set; } = false;
         public static bool DefaultMonitorBattery { get; private set; } = false;
         public static float DefaultHydrogenRefuelThreshold { get; private set; } = 25.0f;
@@ -103,6 +105,7 @@ namespace ImprovedAI.Config
         public static float DefaultBatteryOperationalThreshold { get; private set; } = 40.0f;
         public static float MinPowerThreshold { get; private set; } = 5.0f;
         public static float MaxPowerThreshold { get; private set; } = 95.0f;
+        }
 
         public static class SchedulerBounds
         {

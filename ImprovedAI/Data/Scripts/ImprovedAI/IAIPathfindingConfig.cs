@@ -1,7 +1,7 @@
 ﻿using Sandbox.ModAPI;
 using System;
 
-namespace BetterAIConstructor.Config
+namespace ImprovedAI.Config
 {
     public enum PathfindingMethod
     {

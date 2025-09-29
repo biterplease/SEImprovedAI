@@ -110,10 +110,7 @@ namespace ImprovedAI
                 if (!isInitialized)
                     return;
 
-                if (scheduler != null && MyAPIGateway.Session.IsServer)
-                {
-                    scheduler.UpdateBeforeSimulation10(this);
-                }
+                scheduler.UpdateBeforeSimulation10(this);
             }
             catch (Exception ex)
             {
