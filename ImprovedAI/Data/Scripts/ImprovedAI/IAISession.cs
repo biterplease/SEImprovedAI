@@ -1,8 +1,10 @@
 ﻿using BetterAIConstructor.UI;
+using EmptyKeys.UserInterface.Generated.DataTemplatesContracts_Bindings;
 using ImprovedAI.Config;
 using ImprovedAI.Data.Scripts.ImprovedAI;
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
+using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -17,6 +19,7 @@ namespace ImprovedAI
     public class IAISession : MySessionComponentBase
     {
         public static IAISession Instance;
+        public static ServerConfig _serverConfig;
 
         // Shared message queue for all AI components
         public MessageQueue MessageQueue { get; private set; }
@@ -24,15 +27,21 @@ namespace ImprovedAI
         // Mod-wide settings and management
         private bool isInitialized = false;
         private long _lastUpdateFrame = 0;
-        private int _updateInterval = ServerConfig.Session.UpdateInterval;
+        private int _updateInterval = _serverConfig.Session.UpdateInterval;
         private int updateCounter = 0;
         private const int UPDATE_INTERVAL = 60;
         public static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
+        public const string ModName = "ImprovedAI";
 
         // Collection of all AI blocks in the world
         public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
         public Dictionary<long, IAISchedulerBlock> AIDroneSchedulers = new Dictionary<long, IAISchedulerBlock>();
         public Dictionary<long, IAILogisticsComputerBlock> AILogisticsComputers = new Dictionary<long, IAILogisticsComputerBlock>();
+
+        public  ServerConfig GetConfig()
+        {
+            return _serverConfig;
+        }
 
         public override void LoadData()
         {
@@ -46,11 +55,15 @@ namespace ImprovedAI
         {
             Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
             MessageQueue = MessageQueue.Instance;
-            ServerConfig.LoadConfig();
+            _serverConfig = ServerConfig.Instance;
+            ServerConfig.Instance.LoadConfig();
             Log.Info("Mod loaded successfully");
+
+
 
             isInitialized = true;
         }
+
 
 
         public override void UpdateBeforeSimulation()

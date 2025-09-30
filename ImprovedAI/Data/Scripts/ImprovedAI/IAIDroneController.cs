@@ -23,7 +23,7 @@ namespace ImprovedAI
         private readonly IdGenerator idGenerator;
 
         // Configuration
-        private IAIDroneControllerBlockSettings config;
+        private IAIDroneControllerSettings settings;
         public Drone.OperationMode operationMode;
         public Drone.Capabilities capabilities;
 
@@ -77,10 +77,10 @@ namespace ImprovedAI
         private List<Vector3D> currentPath = new List<Vector3D>();
         private int pathIndex = 0;
 
-        // Update intervals (from server config)
+        // Update intervals (from server settings)
         private readonly int COMPONENT_CHECK_INTERVAL_TICKS = 600;
-        private readonly int STATUS_REPORT_INTERVAL_TICKS = ServerConfig.DroneNetwork.DroneMessageThrottlingTicks;
-        private readonly int POWER_CHECK_INTERVAL_TICKS = ServerConfig.PowerCheckInterval;
+        private readonly int STATUS_REPORT_INTERVAL_TICKS = ServerConfig.Instance.DroneNetwork.DroneMessageThrottlingTicks;
+        private readonly int POWER_CHECK_INTERVAL_TICKS = ServerConfig.Instance.Drone.PowerCheckIntervalTicks;
 
         public IAIDroneController(IMyEntity entity, Drone.OperationMode operationMode = Drone.OperationMode.StandAlone)
         {
@@ -88,8 +88,8 @@ namespace ImprovedAI
             this.entityId = entity.EntityId;
             this.operationMode = operationMode;
             this.idGenerator = new IdGenerator(entityId);
-            this.config = new IAIDroneControllerBlockSettings();
-            this.config.OperationMode = operationMode;
+            this.settings = new IAIDroneControllerSettings();
+            this.settings.OperationMode = operationMode;
             this.cachedInventory = new Inventory();
         }
 
@@ -137,7 +137,7 @@ namespace ImprovedAI
             }
 
             // Power check
-            if (config.MonitorHydrogenLevels || config.MonitorBatteryLevels)
+            if (settings.MonitorHydrogenLevels || settings.MonitorBatteryLevels)
             {
                 if (currentFrame - _lastPowerCheckFrame >= POWER_CHECK_INTERVAL_TICKS)
                 {
@@ -294,7 +294,7 @@ namespace ImprovedAI
                 capabilities |= Drone.Capabilities.HasSensors;
             if (connector != null)
             {
-                if (config.RefuelWhenDocked)
+                if (settings.AlwaysRefuelWhenDocked)
                     capabilities |= Drone.Capabilities.RefuelWhenDocked | Drone.Capabilities.RechargeWhenDocked;
             }
 
@@ -381,7 +381,7 @@ namespace ImprovedAI
         private void CheckPowerLevels()
         {
             // Check hydrogen
-            if (config.MonitorHydrogenLevels && hydrogenTanks.Count > 0)
+            if (settings.MonitorHydrogenLevels && hydrogenTanks.Count > 0)
             {
                 float totalCapacity = 0f;
                 float totalStored = 0f;
@@ -394,7 +394,7 @@ namespace ImprovedAI
 
                 currentH2Level = totalCapacity > 0 ? (totalStored / totalCapacity) * 100f : 0f;
 
-                if (!needsHydrogenRefuel && currentH2Level <= config.HydrogenRefuelThreshold)
+                if (!needsHydrogenRefuel && currentH2Level <= settings.HydrogenRefuelThreshold)
                 {
                     needsHydrogenRefuel = true;
                     Log.Info("Drone {0} H2 low: {1:F1}%", entityId, currentH2Level);
@@ -404,7 +404,7 @@ namespace ImprovedAI
                         currentState = Drone.State.ReturningToBase;
                     }
                 }
-                else if (needsHydrogenRefuel && currentH2Level >= config.HydrogenOperationalThreshold)
+                else if (needsHydrogenRefuel && currentH2Level >= settings.HydrogenOperationalThreshold)
                 {
                     needsHydrogenRefuel = false;
                     Log.Info("Drone {0} H2 refueled: {1:F1}%", entityId, currentH2Level);
@@ -412,7 +412,7 @@ namespace ImprovedAI
             }
 
             // Check battery
-            if (config.MonitorBatteryLevels && batteries.Count > 0)
+            if (settings.MonitorBatteryLevels && batteries.Count > 0)
             {
                 float totalCapacity = 0f;
                 float totalStored = 0f;
@@ -425,7 +425,7 @@ namespace ImprovedAI
 
                 currentBatteryLevel = totalCapacity > 0 ? (totalStored / totalCapacity) * 100f : 0f;
 
-                if (!needsBatteryRecharge && currentBatteryLevel <= config.BatteryRefuelThreshold)
+                if (!needsBatteryRecharge && currentBatteryLevel <= settings.BatteryRefuelThreshold)
                 {
                     needsBatteryRecharge = true;
                     Log.Info("Drone {0} battery low: {1:F1}%", entityId, currentBatteryLevel);
@@ -435,7 +435,7 @@ namespace ImprovedAI
                         currentState = Drone.State.ReturningToBase;
                     }
                 }
-                else if (needsBatteryRecharge && currentBatteryLevel >= config.BatteryOperationalThreshold)
+                else if (needsBatteryRecharge && currentBatteryLevel >= settings.BatteryOperationalThreshold)
                 {
                     needsBatteryRecharge = false;
                     Log.Info("Drone {0} battery recharged: {1:F1}%", entityId, currentBatteryLevel);
@@ -538,7 +538,7 @@ namespace ImprovedAI
             var currentPos = shipController.GetPosition();
             var distance = Vector3D.Distance(currentPos, currentTargetPosition);
 
-            if (distance < config.WaypointTolerance)
+            if (distance < settings.WaypointTolerance)
             {
                 // Arrived at target
                 if (currentTask != null)
@@ -660,7 +660,7 @@ namespace ImprovedAI
         {
             _consecutiveErrors++;
 
-            if (_consecutiveErrors >= ServerConfig.MaxConsecutiveErrors)
+            if (_consecutiveErrors >= ServerConfig.Instance.SchedulerBounds.MaxConsecutiveErrors)
             {
                 // Critical error - disable drone
                 isEnabled = false;
@@ -703,11 +703,11 @@ namespace ImprovedAI
                 DroneState = currentState,
                 Capabilities = capabilities,
                 BatteryChargePercent = currentBatteryLevel,
-                BatteryRechargeThreshold = config.BatteryRefuelThreshold,
-                BatteryOperationalThreshold = config.BatteryOperationalThreshold,
+                BatteryRechargeThreshold = settings.BatteryRefuelThreshold,
+                BatteryOperationalThreshold = settings.BatteryOperationalThreshold,
                 H2Level = currentH2Level,
-                H2RefuelThreshold = config.HydrogenRefuelThreshold,
-                H2OperationalThreshold = config.HydrogenOperationalThreshold
+                H2RefuelThreshold = settings.HydrogenRefuelThreshold,
+                H2OperationalThreshold = settings.HydrogenOperationalThreshold
             };
 
             messaging.SendMessage((ushort)MessageTopics.DRONE_REGISTRATION, report, entityId, requiresAck: false);

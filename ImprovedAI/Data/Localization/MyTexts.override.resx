@@ -14,9 +14,6 @@
 		<value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
 	</resheader>
 
-	<data name="Iron" xml:space="preserve">
-    <value>Ironman</value>
-	 </data>
 	<data name="DisplayName_Block_ImprovedAISmallDroneController" xml:space="preserve">
 		<value>Improved AI Small Drone Controller</value>
 	</data>
@@ -38,4 +35,57 @@
 	<data name="Description_ImprovedAILogisticsComputer" xml:space="preserve">
 		<value>Enables a grid to access the IAI logistics network.</value>
 	</data>
+	<data name="Description_ImprovedAILogisticsComputer" xml:space="preserve">
+		<value>Enables a grid to access the IAI logistics network.</value>
+	</data>
+	<!-- IAI Terminal controls-->
+	<data name="TerminalControl_LogisticsComputer_OperationMode_ProvideForLogistics_Title" xml:space="preserve">
+		<value>Provide for logistics</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_ProvideForLogistics_Tooltip" xml:space="preserve">
+		<value>Provides connected inventory to the logistics network.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_ProvideForConstruction_Title" xml:space="preserve">
+		<value>Provide for construction</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_ProvideForConstructio_Tooltip" xml:space="preserve">
+		<value>Provides connected inventory for construction tasks.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_Request_Title" xml:space="preserve">
+		<value>Request</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_Request_Tooltip" xml:space="preserve">
+		<value>Request inventory from network.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_Push_Title" xml:space="preserve">
+		<value>Push</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_OperationMode_Push_Tooltip" xml:space="preserve">
+		<value>Push inventory to network.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_PushAll_Title" xml:space="preserve">
+		<value>Push everything</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_PushAll_Tooltip" xml:space="preserve">
+		<value>Push all inventory to network.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_PushFrequency_Title" xml:space="preserve">
+		<value>Push frequency (s)</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_PushFrequency_Tooltip" xml:space="preserve">
+		<value>How often to request pickups.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_SetRequests_Title" xml:space="preserve">
+		<value>Set requests</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_SetRequests_Tooltip" xml:space="preserve">
+		<value>Request these items from the network.</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_UseItemLimits_Title" xml:space="preserve">
+		<value>Use item limits</value>
+	</data>
+	<data name="TerminalControl_LogisticsComputer_UseItemLimits_Tooltip" xml:space="preserve">
+		<value>How often to request pickups.</value>
+	</data>
+	<!--END IAI Terminal controls-->
 </root>

@@ -147,7 +147,7 @@ namespace ImprovedAI
             {
                 if (Entity.Storage != null)
                 {
-                    var storage = Entity.Storage.GetValue(Guid.Parse("89afa424-d317-41de-992c-be2854c2f158"));
+                    var storage = Entity.Storage.GetValue(IAISession.ModGuid);
                     if (!string.IsNullOrEmpty(storage))
                     {
                         ParseConfiguration(storage);

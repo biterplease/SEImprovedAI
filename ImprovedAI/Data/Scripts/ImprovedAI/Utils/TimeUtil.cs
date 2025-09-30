@@ -5,9 +5,13 @@ namespace ImprovedAI.Utils
 {
     public static class TimeUtil
     {
-        public const double TICKS_PER_SECOND = 60.0;
-        public const double MILLISECONDS_PER_TICK = 1000.0 / TICKS_PER_SECOND; // 16.666... ms
-        public const double TICKS_PER_MILLISECOND = TICKS_PER_SECOND / 1000.0; // 0.06 ticks
+        public const float TICKS_PER_SECOND = 60.0f;
+        public const float MILLISECONDS_PER_TICK = 1000.0f / TICKS_PER_SECOND; // 16.666... ms
+        public const float TICKS_PER_MILLISECOND = TICKS_PER_SECOND / 1000.0f; // 0.06 ticks
+        public static float TickToSeconds(int ticks)
+        {
+            return ticks / TICKS_PER_SECOND;
+        }
         /// <summary>
         /// Convert ticks to MS, rounded down
         /// </summary>

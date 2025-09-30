@@ -38,7 +38,7 @@ namespace ImprovedAI
             Error
         }
         [ProtoContract]
-        public enum OperationMode
+        public enum OperationMode : byte
         {
             [ProtoEnum]
             StandAlone,
@@ -74,6 +74,10 @@ namespace ImprovedAI
             CombatReady = 512,
             [ProtoEnum]
             HasSensors = 1024,
+            [ProtoEnum]
+            HasCameras = 2048,
+            [ProtoEnum]
+            HasCargoContainers = 4096,
         }
         [ProtoContract, Flags]
         public enum UpdateFlags : ushort

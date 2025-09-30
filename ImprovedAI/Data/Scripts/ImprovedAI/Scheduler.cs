@@ -82,76 +82,78 @@ namespace ImprovedAI
             [ProtoEnum]
             DelegateIfNoDrones = 8,
         }
-        [ProtoContract]
-        public enum TaskType : byte
+        [Flags, ProtoContract]
+        public enum TaskType : ushort
         {
+            None = 0,
             /// <summary>
             ///  Weld a block with needed components.
             /// </summary>
             [ProtoEnum]
-            PreciseWelding,
+            PreciseWelding =1,
             /// <summary>
             /// Grind a specific block down until capacity.
             /// </summary>
             [ProtoEnum]
-            PreciseGrinding,
+            PreciseGrinding =2,
             /// <summary>
             /// Go mine some ore at specific location
             /// </summary>
             [ProtoEnum]
-            PreciseDrilling,
+            PreciseDrilling =4,
             /// <summary>
             /// Go to specific location, connect to connector at exact location, and attempt to transfer items.
             /// </summary>
             [ProtoEnum]
-            PreciseDelivery,
+            PreciseDelivery=8,
             /// <summary>
             /// Go to specific location, and drop payload at location.
             /// </summary>
             [ProtoEnum]
-            PreciseDrop,
+            PreciseDrop=16,
             /// <summary>
             /// Drop a cargo pod with a parachute at specific location.
             /// </summary>
             [ProtoEnum]
-            PreciseCargoAirdrop,
+            PreciseCargoAirdrop=32,
             /// <summary>
             /// Go to specific location, connect to connector at exact location, and attempt to retrieve items.
             /// </summary>
             [ProtoEnum]
-            PreciseFetch,
+            PreciseFetch=64,
             /// <summary>
             ///  Go to specified location, find a matching block to weld, and weld it.
             /// </summary>
             [ProtoEnum]
-            ScanWeld,
+            ScanWeld = 128,
             /// <summary>
             /// Go to specified location, find a matching block to grind, and grind it.
             /// </summary>
             [ProtoEnum]
-            ScanGrind,
+            ScanGrind=256,
             /// <summary>
             /// Go to location, and scan for specified ore, and mine it.
             /// </summary>
             [ProtoEnum]
-            ScanDrill,
+            ScanDrill=512,
             /// <summary>
             /// Go to location, scan for a friendly connector, connect and attempt to unload items.
             /// </summary>
             [ProtoEnum]
-            ScanDelivery,
+            ScanDelivery=1024,
             /// <summary>
             /// Go to location, scan for a friendly connector, connect and attempt to load items.
             /// </summary>
             [ProtoEnum]
-            ScanFetch,
+            ScanFetch = 2048,
             /// <summary>
             /// Attempt to push items into the logistics network.
             /// </summary>
             [ProtoEnum]
-            ActiveProvide,
+            ActiveProvide=4096,
+            // Order drone to self manage
             [ProtoEnum]
-            BecomeStandAlone,
+            BecomeStandAlone = 8192,
         }
         [Serializable, ProtoContract(UseProtoMembersOnly = true)]
         public class Task

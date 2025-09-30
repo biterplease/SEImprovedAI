@@ -17,12 +17,14 @@ namespace ImprovedAI
             Active,
             Error
         }
-
+        [Flags]
         public enum OperationMode : byte
         {
             None = 0,
-            Provider = 1,
-            Requester = 2
+            ProvideForLogistics = 1,
+            ProvideForConstruction = 2,
+            Push = 4,
+            Request = 8
         }
         [ProtoMember(1)]
         public long EntityId;

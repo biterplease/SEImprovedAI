@@ -48,7 +48,7 @@ namespace ImprovedAI
         private readonly int INVENTORY_SCAN_INTERVAL_TICKS = 180;
         private readonly int PUSH_CHECK_INTERVAL_TICKS = 300; // Check for excess every 5 seconds
 
-        public IAILogisticsComputer(IMyEntity entity, MessageQueue messaging,OperationMode operationMode = OperationMode.Provider)
+        public IAILogisticsComputer(IMyEntity entity, MessageQueue messaging,OperationMode operationMode = OperationMode.ProvideForConstruction)
         {
             this.Entity = entity;
             this.entityId = entity.EntityId;
@@ -116,7 +116,7 @@ namespace ImprovedAI
                 }
 
                 // Provider-specific: Check for excess inventory to push
-                if (operationMode == OperationMode.Provider && autoPushEnabled)
+                if (operationMode == OperationMode.Push && autoPushEnabled)
                 {
                     if (currentFrame - lastPushCheckFrame >= PUSH_CHECK_INTERVAL_TICKS)
                     {
@@ -126,7 +126,7 @@ namespace ImprovedAI
                 }
 
                 // Requester-specific: Periodically check if needs are still unmet
-                if (operationMode == OperationMode.Requester)
+                if (operationMode == OperationMode.Request)
                 {
                     // Requester sends LOGISTIC_REQUEST when it needs items
                     // This is typically triggered by user action or automation logic
@@ -357,7 +357,7 @@ namespace ImprovedAI
         /// </summary>
         public void RequestInventory(IMyShipConnector connector, Inventory requestedInventory)
         {
-            if (operationMode != OperationMode.Requester)
+            if (operationMode != OperationMode.Request)
             {
                 Log.Warning("LogisticsComputer {0} cannot request inventory - not in Requester mode", entityId);
                 return;
@@ -389,7 +389,7 @@ namespace ImprovedAI
         /// </summary>
         public void PushInventory(IMyShipConnector connector ,Inventory inventoryToPush)
         {
-            if (operationMode != OperationMode.Provider)
+            if (operationMode != OperationMode.Push)
             {
                 Log.Warning("LogisticsComputer {0} cannot push inventory - not in Provider mode", entityId);
                 return;
@@ -422,7 +422,7 @@ namespace ImprovedAI
         /// </summary>
         public void SetBufferLimit(string itemSubtypeId, int maxAmount)
         {
-            if (operationMode != OperationMode.Provider)
+            if (operationMode != OperationMode.Push)
             {
                 Log.Warning("LogisticsComputer {0} cannot set buffer limits - not in Provider mode", entityId);
                 return;
@@ -445,7 +445,7 @@ namespace ImprovedAI
                    primaryAntenna != null && primaryAntenna.IsWorking;
         }
 
-        public LogisticsOperationMode GetOperationMode()
+        public OperationMode GetOperationMode()
         {
             return operationMode;
         }

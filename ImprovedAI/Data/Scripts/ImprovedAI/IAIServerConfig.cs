@@ -8,7 +8,6 @@ using VRage.Game.ModAPI.Ingame.Utilities;
 using VRage.Utils;
 using VRageMath;
 
-
 namespace ImprovedAI.Config
 {
     public enum LogLevel
@@ -19,13 +18,15 @@ namespace ImprovedAI.Config
         Warning,
         Error
     }
+
     /// <summary>
-    /// Serialization mode for the message queue
+    /// Serialization mode for the pseudo-network message queue.
+    /// This is how drones, schedulers and logistics computers communicate with each other.
     /// </summary>
     public enum MessageSerializationMode : byte
     {
         /// <summary>
-        /// XML serialization is slow, but good for debugging.
+        /// XML serialization is slow, use only for debugging.
         /// </summary>
         XML,
 
@@ -35,131 +36,185 @@ namespace ImprovedAI.Config
         ProtoBuf
     }
 
-    public static class ServerConfig
+    public class ServerConfig
     {
-        public const string MOD_NAME = "BetterAIConstructor";
+        private static ServerConfig _instance;
+        public static ServerConfig Instance
+        {
+            get
+            {
+                if (_instance == null)
+                    _instance = new ServerConfig();
+                return _instance;
+            }
+        }
+
+        public const string MOD_NAME = "ImprovedAI";
         private static bool _configLoaded = false;
-        private static readonly string CONFIG_FILENAME = "BetterAIConstructor.cfg";
+        private static readonly string CONFIG_FILENAME = "ImprovedAI.ini";
 
-        public static class Session
+        public SessionConfig Session { get; private set; }
+        public BlockLimitConfig BlockLimits { get; private set; }
+        public PathfindingConfig Pathfinding { get; private set; }
+        public DroneControllerBlockConfig Drone { get; private set; }
+        public DroneNetworkConfig DroneNetwork { get; private set; }
+        public LoggingConfig Logging { get; private set; }
+        public SchedulerBlockConfig SchedulerBounds { get; private set; }
+        public LogisticsComputerConfig LogisticsComputer { get; private set; }
+
+        private ServerConfig()
         {
-            public static int UpdateInterval { get; private set; } = 100;
+            // Initialize all nested config objects
+            Session = new SessionConfig();
+            BlockLimits = new BlockLimitConfig();
+            Pathfinding = new PathfindingConfig();
+            Drone = new DroneControllerBlockConfig();
+            SchedulerBounds = new SchedulerBlockConfig();
+            DroneNetwork = new DroneNetworkConfig();
+            Logging = new LoggingConfig();
+            LogisticsComputer = new LogisticsComputerConfig();
         }
 
-        public static class BlockLimits
+        public class SessionConfig
         {
-            public static int MaxSchedulersPerPlayer { get; private set; } = 1;
-            public static int MaxSchedulersPerFaction { get; private set; } = 5;
-            public static int MaxDroneControllersPerPlayer { get; private set; } = 10;
-            public static int MaxDroneControllersPerFaction { get; private set; } = 50;
+            public int UpdateInterval { get; internal set; } = 100;
+            public bool EnableLogistics { get; internal set; } = true;
+            public bool EnableWeldTasks { get; internal set; } = true;
+            public bool EnableGrindTasks { get; internal set; } = true;
         }
 
-        // Pathfinding
-        public static class Pathfinding
+        public class LogisticsComputerConfig
         {
-            public static bool AllowDirectPathfinding { get; private set; } = true;
-            public static bool AllowSensors { get; private set; } = true;
-            public static bool AllowObstacleAvoidance { get; private set; } = true;
-            public static bool AllowSimpleRepositioning { get; private set; } = true;
-            public static bool AllowAStar { get; private set; } = false;
-            public static bool AllowDStarLite { get; private set; } = false;
-            public static bool UseGravityAwarePathing { get; private set; } = true;
-            public static double MinWaypointDistance { get; private set; } = 5.0;
-            public static double MaxWaypointDistance { get; private set; } = 15.0;
-            public static int MaxRepositionAttempts { get; private set; } = 10;
-            public static double RepositionStep { get; private set; } = 10.0;
-            public static double MinAltitudeBuffer { get; private set; } = 20.0;
-            public static int MaxPathNodes { get; private set; } = 1000;
-            public static TimeSpan MaxPathfindingTime { get; private set; } = TimeSpan.FromMilliseconds(50);
+            /// <summary>
+            /// If disabled, logistics will not be available, and the only operation mode available
+            /// will be ProvideForConstruction.
+            /// </summary>
+            public bool AllowLogistics { get; internal set; } = true;
+            public bool AllowNetworkPush { get; internal set; } = true;
+            public bool AllowNetworkRequests { get; internal set; } = true;
+            /// <summary>
+            /// If push is enabled, minimum allowed value for block. Default 10s.
+            /// </summary>
+            public int MinPushFrequencyTicks { get; internal set; } = 600;
+            /// <summary>
+            /// If push is enabled, maximum allowed value for block. Default 30 min.
+            /// </summary>
+            public int MaxPushFrequencyTicks { get; internal set; } = TimeUtil.TimeSpanToTick(new TimeSpan(0, 30, 0)); // 30 minutes
         }
 
-
-        // Safety
-        // Power
-        public static class Drone
+        public class BlockLimitConfig
         {
-            public static bool DefaultMonitorHydrogen { get; private set; } = false;
-            public static bool DefaultMonitorBattery { get; private set; } = false;
-            public static float DefaultHydrogenRefuelThreshold { get; private set; } = 25.0f;
-            public static float DefaultHydrogenOperationalThreshold { get; private set; } = 50.0f;
-            public static float DefaultBatteryRefuelThreshold { get; private set; } = 20.0f;
-            public static float DefaultBatteryOperationalThreshold { get; private set; } = 40.0f;
-            public static float MinPowerThreshold { get; private set; } = 5.0f;
-            public static float MaxPowerThreshold { get; private set; } = 95.0f;
+            public int MaxSchedulersPerPlayer { get; internal set; } = 1;
+            public int MaxSchedulersPerFaction { get; internal set; } = 5;
+            public int MaxDroneControllersPerPlayer { get; internal set; } = 10;
+            public int MaxDroneControllersPerFaction { get; internal set; } = 50;
         }
 
-        public static class SchedulerBounds
+        public class PathfindingConfig
         {
-            public static int MaxTargetLimit { get; private set; } = 100;
-            public static int PerScanLimit { get; private set; } = 100;
-            public static int MaxTaskAssignmentPerBatch { get; private set; } = 10;
+            public bool AllowDirectPathfinding { get; internal set; } = true;
+            public bool AllowSensors { get; internal set; } = true;
+            public bool AllowObstacleAvoidance { get; internal set; } = true;
+            public bool AllowSimpleRepositioning { get; internal set; } = true;
+            public bool AllowAStar { get; internal set; } = false;
+            public bool AllowDStarLite { get; internal set; } = false;
+            public bool UseGravityAwarePathing { get; internal set; } = true;
+            public double MinWaypointDistance { get; internal set; } = 5.0;
+            public double MaxWaypointDistance { get; internal set; } = 15.0;
+            public int MaxRepositionAttempts { get; internal set; } = 10;
+            public double RepositionStep { get; internal set; } = 10.0;
+            public double MinAltitudeBuffer { get; internal set; } = 20.0;
+            public int MaxPathNodes { get; internal set; } = 1000;
+            public TimeSpan MaxPathfindingTime { get; internal set; } = TimeSpan.FromMilliseconds(50);
+        }
+
+        public class DroneControllerBlockConfig
+        {
+            public bool DefaultMonitorHydrogen { get; internal set; } = false;
+            public bool DefaultMonitorBattery { get; internal set; } = false;
+            public float DefaultHydrogenRefuelThreshold { get; internal set; } = 25.0f;
+            public float DefaultHydrogenOperationalThreshold { get; internal set; } = 50.0f;
+            public float DefaultBatteryRefuelThreshold { get; internal set; } = 20.0f;
+            public float DefaultBatteryOperationalThreshold { get; internal set; } = 40.0f;
+            public float MinPowerThreshold { get; internal set; } = 5.0f;
+            public float MaxPowerThreshold { get; internal set; } = 95.0f;
+            public int PowerCheckIntervalTicks { get; private set; } = 300;
+        }
+
+        public class SchedulerBlockConfig
+        {
+            public int MaxTargetLimit { get; internal set; } = 100;
+            public int PerScanLimit { get; internal set; } = 100;
+            public int MaxTaskAssignmentPerBatch { get; internal set; } = 10;
+
             /// <summary>
             /// Update intervals different for every state
             /// </summary>
-            public static class StateUpdateIntervalTicks
+            public class StateUpdateIntervalTicksConfig
             {
-
-                public static int Initializing { get; private set; } = 600;
-                public static int Error { get; private set; } = 600;
-                public static int Standby { get; private set; } = 600;
-                public static int Scanning { get; private set; } = 60;
-                public static int Assigning { get; private set; } = 60;
+                public int Initializing { get; internal set; } = 600;
+                public int Error { get; internal set; } = 600;
+                public int Standby { get; internal set; } = 600;
+                public int Scanning { get; internal set; } = 60;
+                public int Assigning { get; internal set; } = 60;
             }
+
+            public StateUpdateIntervalTicksConfig StateUpdateIntervalTicks { get; internal set; } = new StateUpdateIntervalTicksConfig();
+
             /// <summary>
             /// When on standby, wait ScanDelayTicks before scanning again.
             /// </summary>
-            public static int ScanDelayTicks = 600;
-            public static int ErrorRecoveryIntervalTicks = 300;
-            public static int MaxConsecutiveErrors = 3;
+            public int ScanDelayTicks { get; internal set; } = 600;
+            public int ErrorRecoveryIntervalTicks { get; internal set; } = 300;
+            public int MaxConsecutiveErrors { get; internal set; } = 3;
             /// <summary>
             /// The scheduler will perform a cleanup of orphaned drones that are no longer in its range.
             /// For whatever reason. Default is 5 minutes.
             /// </summary>
-            public static int ManintenanceIntervalTicks = 300; // 30 seconds
+            public int ManintenanceIntervalTicks { get; internal set; } = 300; // 30 seconds
         }
+
         /// <summary>
         /// This section is about the Drone network communication.
         /// System implements a pseudo-messaging system between scheduler and drones.
         /// </summary>
-        public static class DroneNetwork
+        public class DroneNetworkConfig
         {
-            public static bool AllowNetworkBroadcasting { get; private set; } = true;
-            public static float DefaultAntennaRange { get; private set; } = 1000.0f;
-            public static float NetworkUpdateRate { get; private set; } = 10.0f;
+            public bool AllowNetworkBroadcasting { get; internal set; } = true;
+            public float DefaultAntennaRange { get; internal set; } = 1000.0f;
+            public float NetworkUpdateRate { get; internal set; } = 10.0f;
             /// <summary>
             /// Schedulers keep a cache of antennas. Limit how often said cache is updated.
             /// </summary>
-            public static int SchedulerAntennaCacheUpdateIntervalTicks { get; private set; } = 60;
+            public int SchedulerAntennaCacheUpdateIntervalTicks { get; internal set; } = 60;
             /// <summary>
             /// Throttling for scheduler reading subscribed messages.
             /// </summary>
             // 4 messages/second, scheduler expects a lot of messages from managed drones
-            public static int SchedulerMessageThrottlingTicks { get; private set; } = 15;
-            public static int SchedulerMessageReadLimit { get; private set; } = 50;
+            public int SchedulerMessageThrottlingTicks { get; internal set; } = 15;
+            public int SchedulerMessageReadLimit { get; internal set; } = 50;
             /// <summary>
-            /// Throttling for scheduler reading subscribed messages.
+            /// Throttling for drone reading subscribed messages.
             /// </summary>
             // 1 message every 3 seconds, drone orders are not as frequent.
-            public static int DroneMessageThrottlingTicks { get; private set; } = 180; // 3 seconds
+            public int DroneMessageThrottlingTicks { get; internal set; } = 180; // 3 seconds
             /// <summary>
             /// How long messages live in the message queue.
             /// </summary>
-            public static int MessageRetentionTicks { get; private set; } = 1800; // 30 seconds
-            public static int MessageCleanupIntervalTicks { get; private set; } = 600; // 10 seconds
-            public static MessageSerializationMode MessageSerializationMode { get; private set; } = MessageSerializationMode.ProtoBuf;
+            public int MessageRetentionTicks { get; internal set; } = 1800; // 30 seconds
+            public int MessageCleanupIntervalTicks { get; internal set; } = 600; // 10 seconds
+            public MessageSerializationMode MessageSerializationMode { get; internal set; } = MessageSerializationMode.ProtoBuf;
         }
 
-        // Logging
-        public static class Logging
+        public class LoggingConfig
         {
-            public static LogLevel LogLevel { get; private set; } = LogLevel.Info;
-            public static bool LogPathfinding { get; private set; } = false;
-            public static bool LogDroneNetwork { get; private set; } = true;
-            public static bool LogDroneOrders { get; private set; } = true;
+            public LogLevel LogLevel { get; internal set; } = LogLevel.Info;
+            public bool LogPathfinding { get; internal set; } = false;
+            public bool LogDroneNetwork { get; internal set; } = true;
+            public bool LogDroneOrders { get; internal set; } = true;
         }
 
-
-        public static void LoadConfig()
+        public void LoadConfig()
         {
             if (_configLoaded) return;
             _configLoaded = true;
@@ -183,7 +238,6 @@ namespace ImprovedAI.Config
                 }
 
                 ParseConfig(configText);
-                ApplyPathfindingConfig();
 
                 MyAPIGateway.Utilities.ShowMessage(MOD_NAME, "Server configuration loaded successfully");
             }
@@ -194,13 +248,13 @@ namespace ImprovedAI.Config
             }
         }
 
-        private static string LoadConfigFile()
+        private string LoadConfigFile()
         {
             try
             {
                 // Get the current mod item
                 var modItem = MyAPIGateway.Session.Mods.FirstOrDefault(m => m.GetPath().Contains("ImprovedAI"));
-                if (modItem.Name == MOD_NAME)
+                if (modItem.Name != MOD_NAME)
                 {
                     Log.Warning($"{MOD_NAME}: Could not find mod item for config loading");
                     return null;
@@ -232,7 +286,7 @@ namespace ImprovedAI.Config
             }
         }
 
-        private static void ParseConfig(string configText)
+        private void ParseConfig(string configText)
         {
             var ini = new MyIni();
             if (!ini.TryParse(configText))
@@ -241,80 +295,99 @@ namespace ImprovedAI.Config
                 return;
             }
 
+            // Parse Session section
+            Session.UpdateInterval = Math.Max(1, ini.Get("Session", "UpdateInterval").ToInt32(Session.UpdateInterval));
+            Session.EnableLogistics = ini.Get("Session", "EnableLogistics").ToBoolean(Session.EnableLogistics);
+            Session.EnableWeldTasks = ini.Get("Session", "EnableWeldTasks").ToBoolean(Session.EnableWeldTasks);
+            Session.EnableGrindTasks = ini.Get("Session", "EnableGrindTasks").ToBoolean(Session.EnableGrindTasks);
+
             // Parse Limits section
-            MaxConstructorsPerPlayer = Math.Max(0, ini.Get("Limits", "MaxConstructorsPerPlayer").ToInt32(MaxConstructorsPerPlayer));
-            MaxConstructorsPerFaction = Math.Max(0, ini.Get("Limits", "MaxConstructorsPerFaction").ToInt32(MaxConstructorsPerFaction));
-            MaxConstructorsTotal = Math.Max(0, ini.Get("Limits", "MaxConstructorsTotal").ToInt32(MaxConstructorsTotal));
+            BlockLimits.MaxSchedulersPerPlayer = Math.Max(0, ini.Get("Limits", "MaxSchedulersPerPlayer").ToInt32(BlockLimits.MaxSchedulersPerPlayer));
+            BlockLimits.MaxSchedulersPerFaction = Math.Max(0, ini.Get("Limits", "MaxSchedulersPerFaction").ToInt32(BlockLimits.MaxSchedulersPerFaction));
+            BlockLimits.MaxDroneControllersPerPlayer = Math.Max(0, ini.Get("Limits", "MaxDroneControllersPerPlayer").ToInt32(BlockLimits.MaxDroneControllersPerPlayer));
+            BlockLimits.MaxDroneControllersPerFaction = Math.Max(0, ini.Get("Limits", "MaxDroneControllersPerFaction").ToInt32(BlockLimits.MaxDroneControllersPerFaction));
 
             // Parse Pathfinding section
-            AllowDirectPathfinding = ini.Get("Pathfinding", "AllowDirectPathfinding").ToBoolean(AllowDirectPathfinding);
-            AllowSensors = ini.Get("Pathfinding", "AllowSensors").ToBoolean(AllowSensors);
-            AllowObstacleAvoidance = ini.Get("Pathfinding", "AllowObstacleAvoidance").ToBoolean(AllowObstacleAvoidance);
-            AllowSimpleRepositioning = ini.Get("Pathfinding", "AllowSimpleRepositioning").ToBoolean(AllowSimpleRepositioning);
-            AllowAStar = ini.Get("Pathfinding", "AllowAStar").ToBoolean(AllowAStar);
-            AllowDStarLite = ini.Get("Pathfinding", "AllowDStarLite").ToBoolean(AllowDStarLite);
-            UseGravityAwarePathing = ini.Get("Pathfinding", "UseGravityAwarePathing").ToBoolean(UseGravityAwarePathing);
-            MinWaypointDistance = Math.Max(1.0, ini.Get("Pathfinding", "MinWaypointDistance").ToDouble(MinWaypointDistance));
-            MaxWaypointDistance = Math.Max(MinWaypointDistance, ini.Get("Pathfinding", "MaxWaypointDistance").ToDouble(MaxWaypointDistance));
-            MaxRepositionAttempts = Math.Max(1, ini.Get("Pathfinding", "MaxRepositionAttempts").ToInt32(MaxRepositionAttempts));
-            RepositionStep = Math.Max(1.0, ini.Get("Pathfinding", "RepositionStep").ToDouble(RepositionStep));
-            MinAltitudeBuffer = Math.Max(0.0, ini.Get("Pathfinding", "MinAltitudeBuffer").ToDouble(MinAltitudeBuffer));
+            Pathfinding.AllowDirectPathfinding = ini.Get("Pathfinding", "AllowDirectPathfinding").ToBoolean(Pathfinding.AllowDirectPathfinding);
+            Pathfinding.AllowSensors = ini.Get("Pathfinding", "AllowSensors").ToBoolean(Pathfinding.AllowSensors);
+            Pathfinding.AllowObstacleAvoidance = ini.Get("Pathfinding", "AllowObstacleAvoidance").ToBoolean(Pathfinding.AllowObstacleAvoidance);
+            Pathfinding.AllowSimpleRepositioning = ini.Get("Pathfinding", "AllowSimpleRepositioning").ToBoolean(Pathfinding.AllowSimpleRepositioning);
+            Pathfinding.AllowAStar = ini.Get("Pathfinding", "AllowAStar").ToBoolean(Pathfinding.AllowAStar);
+            Pathfinding.AllowDStarLite = ini.Get("Pathfinding", "AllowDStarLite").ToBoolean(Pathfinding.AllowDStarLite);
+            Pathfinding.UseGravityAwarePathing = ini.Get("Pathfinding", "UseGravityAwarePathing").ToBoolean(Pathfinding.UseGravityAwarePathing);
+            Pathfinding.MinWaypointDistance = Math.Max(1.0, ini.Get("Pathfinding", "MinWaypointDistance").ToDouble(Pathfinding.MinWaypointDistance));
+            Pathfinding.MaxWaypointDistance = Math.Max(Pathfinding.MinWaypointDistance, ini.Get("Pathfinding", "MaxWaypointDistance").ToDouble(Pathfinding.MaxWaypointDistance));
+            Pathfinding.MaxRepositionAttempts = Math.Max(1, ini.Get("Pathfinding", "MaxRepositionAttempts").ToInt32(Pathfinding.MaxRepositionAttempts));
+            Pathfinding.RepositionStep = Math.Max(1.0, ini.Get("Pathfinding", "RepositionStep").ToDouble(Pathfinding.RepositionStep));
+            Pathfinding.MinAltitudeBuffer = Math.Max(0.0, ini.Get("Pathfinding", "MinAltitudeBuffer").ToDouble(Pathfinding.MinAltitudeBuffer));
+            Pathfinding.MaxPathNodes = Math.Max(100, ini.Get("Pathfinding", "MaxPathNodes").ToInt32(Pathfinding.MaxPathNodes));
+            var maxPathfindingMs = Math.Max(10, ini.Get("Pathfinding", "MaxPathfindingTimeMs").ToInt32(50));
+            Pathfinding.MaxPathfindingTime = TimeSpan.FromMilliseconds(maxPathfindingMs);
 
-            // Parse Performance section
-            MaxPathNodes = Math.Max(100, ini.Get("Performance", "MaxPathNodes").ToInt32(MaxPathNodes));
-            var maxPathfindingMs = Math.Max(10, ini.Get("Performance", "MaxPathfindingTimeMs").ToInt32(50));
-            MaxPathfindingTime = TimeSpan.FromMilliseconds(maxPathfindingMs);
-            AIUpdateInterval = Math.Max(1, ini.Get("Performance", "AIUpdateInterval").ToInt32(AIUpdateInterval));
-            PowerCheckInterval = Math.Max(60, ini.Get("Performance", "PowerCheckInterval").ToInt32(PowerCheckInterval));
-            BroadcastInterval = Math.Max(60, ini.Get("Performance", "BroadcastInterval").ToInt32(BroadcastInterval));
-            SchedulerAntennaCacheUpdateInterval = Math.Max(600, ini.Get("Performance", "SchedulerAntennaCacheInterval").ToInt32(BroadcastInterval));
+            // Parse Scheduler section
+            SchedulerBounds.MaxTargetLimit = Math.Max(1, ini.Get("Scheduler", "MaxTargetLimit").ToInt32(SchedulerBounds.MaxTargetLimit));
+            SchedulerBounds.PerScanLimit = Math.Max(10, ini.Get("Scheduler", "PerScanLimit").ToInt32(SchedulerBounds.PerScanLimit));
+            SchedulerBounds.MaxTaskAssignmentPerBatch = Math.Max(1, ini.Get("Scheduler", "MaxTaskAssignmentPerBatch").ToInt32(SchedulerBounds.MaxTaskAssignmentPerBatch));
+            SchedulerBounds.ScanDelayTicks = Math.Max(60, ini.Get("Scheduler", "ScanDelayTicks").ToInt32(SchedulerBounds.ScanDelayTicks));
+            SchedulerBounds.ErrorRecoveryIntervalTicks = Math.Max(60, ini.Get("Scheduler", "ErrorRecoveryIntervalTicks").ToInt32(SchedulerBounds.ErrorRecoveryIntervalTicks));
+            SchedulerBounds.MaxConsecutiveErrors = Math.Max(1, ini.Get("Scheduler", "MaxConsecutiveErrors").ToInt32(SchedulerBounds.MaxConsecutiveErrors));
+            SchedulerBounds.ManintenanceIntervalTicks = Math.Max(60, ini.Get("Scheduler", "MaintenanceIntervalTicks").ToInt32(SchedulerBounds.ManintenanceIntervalTicks));
 
-            // Parse Construction section
-            MaxBlocksPerScan = Math.Max(10, ini.Get("Construction", "MaxBlocksPerScan").ToInt32(MaxBlocksPerScan));
-            MaxTargetBlocks = Math.Max(1, ini.Get("Construction", "MaxTargetBlocks").ToInt32(MaxTargetBlocks));
-            DefaultConstructionRange = Math.Max(10.0, ini.Get("Construction", "DefaultConstructionRange").ToDouble(DefaultConstructionRange));
-            MaxConstructionRange = Math.Max(DefaultConstructionRange, ini.Get("Construction", "MaxConstructionRange").ToDouble(MaxConstructionRange));
+            // Parse Scheduler State Update Intervals
+            SchedulerBounds.StateUpdateIntervalTicks.Initializing = Math.Max(60, ini.Get("Scheduler", "InitializingUpdateInterval").ToInt32(SchedulerBounds.StateUpdateIntervalTicks.Initializing));
+            SchedulerBounds.StateUpdateIntervalTicks.Error = Math.Max(60, ini.Get("Scheduler", "ErrorUpdateInterval").ToInt32(SchedulerBounds.StateUpdateIntervalTicks.Error));
+            SchedulerBounds.StateUpdateIntervalTicks.Standby = Math.Max(60, ini.Get("Scheduler", "StandbyUpdateInterval").ToInt32(SchedulerBounds.StateUpdateIntervalTicks.Standby));
+            SchedulerBounds.StateUpdateIntervalTicks.Scanning = Math.Max(10, ini.Get("Scheduler", "ScanningUpdateInterval").ToInt32(SchedulerBounds.StateUpdateIntervalTicks.Scanning));
+            SchedulerBounds.StateUpdateIntervalTicks.Assigning = Math.Max(10, ini.Get("Scheduler", "AssigningUpdateInterval").ToInt32(SchedulerBounds.StateUpdateIntervalTicks.Assigning));
 
-            // Parse Safety section
-            EnableSafetyLimits = ini.Get("Safety", "EnableSafetyLimits").ToBoolean(EnableSafetyLimits);
-            MaxThrustOverride = MathHelper.Clamp(ini.Get("Safety", "MaxThrustOverride").ToSingle(MaxThrustOverride), 0.0f, 1.0f);
-            MaxGyroOverride = MathHelper.Clamp(ini.Get("Safety", "MaxGyroOverride").ToSingle(MaxGyroOverride), 0.0f, 1.0f);
-            RequireConnector = ini.Get("Safety", "RequireConnector").ToBoolean(RequireConnector);
-            RequireWelderForWelding = ini.Get("Safety", "RequireWelderForWelding").ToBoolean(RequireWelderForWelding);
-            RequireGrinderForGrinding = ini.Get("Safety", "RequireGrinderForGrinding").ToBoolean(RequireGrinderForGrinding);
-            EnableEmergencyStop = ini.Get("Safety", "EnableEmergencyStop").ToBoolean(EnableEmergencyStop);
-            MaxConsecutiveErrors = Math.Max(1, ini.Get("Safety", "MaxConsecutiveErrors").ToInt32(MaxConsecutiveErrors));
+            // Parse Drone section
+            Drone.DefaultMonitorHydrogen = ini.Get("Drone", "DefaultMonitorHydrogen").ToBoolean(Drone.DefaultMonitorHydrogen);
+            Drone.DefaultMonitorBattery = ini.Get("Drone", "DefaultMonitorBattery").ToBoolean(Drone.DefaultMonitorBattery);
+            Drone.DefaultHydrogenRefuelThreshold = MathHelper.Clamp(ini.Get("Drone", "DefaultHydrogenRefuelThreshold").ToSingle(Drone.DefaultHydrogenRefuelThreshold), 5.0f, 95.0f);
+            Drone.DefaultHydrogenOperationalThreshold = MathHelper.Clamp(ini.Get("Drone", "DefaultHydrogenOperationalThreshold").ToSingle(Drone.DefaultHydrogenOperationalThreshold), Drone.DefaultHydrogenRefuelThreshold + 5.0f, 95.0f);
+            Drone.DefaultBatteryRefuelThreshold = MathHelper.Clamp(ini.Get("Drone", "DefaultBatteryRefuelThreshold").ToSingle(Drone.DefaultBatteryRefuelThreshold), 5.0f, 95.0f);
+            Drone.DefaultBatteryOperationalThreshold = MathHelper.Clamp(ini.Get("Drone", "DefaultBatteryOperationalThreshold").ToSingle(Drone.DefaultBatteryOperationalThreshold), Drone.DefaultBatteryRefuelThreshold + 5.0f, 95.0f);
+            Drone.MinPowerThreshold = MathHelper.Clamp(ini.Get("Drone", "MinPowerThreshold").ToSingle(Drone.MinPowerThreshold), 1.0f, 50.0f);
+            Drone.MaxPowerThreshold = MathHelper.Clamp(ini.Get("Drone", "MaxPowerThreshold").ToSingle(Drone.MaxPowerThreshold), 50.0f, 99.0f);
 
-            // Parse Power section
-            DefaultMonitorHydrogen = ini.Get("Power", "DefaultMonitorHydrogen").ToBoolean(DefaultMonitorHydrogen);
-            DefaultMonitorBattery = ini.Get("Power", "DefaultMonitorBattery").ToBoolean(DefaultMonitorBattery);
-            DefaultHydrogenRefuelThreshold = MathHelper.Clamp(ini.Get("Power", "DefaultHydrogenRefuelThreshold").ToSingle(DefaultHydrogenRefuelThreshold), 5.0f, 95.0f);
-            DefaultHydrogenOperationalThreshold = MathHelper.Clamp(ini.Get("Power", "DefaultHydrogenOperationalThreshold").ToSingle(DefaultHydrogenOperationalThreshold), DefaultHydrogenRefuelThreshold + 5.0f, 95.0f);
-            DefaultBatteryRefuelThreshold = MathHelper.Clamp(ini.Get("Power", "DefaultBatteryRefuelThreshold").ToSingle(DefaultBatteryRefuelThreshold), 5.0f, 95.0f);
-            DefaultBatteryOperationalThreshold = MathHelper.Clamp(ini.Get("Power", "DefaultBatteryOperationalThreshold").ToSingle(DefaultBatteryOperationalThreshold), DefaultBatteryRefuelThreshold + 5.0f, 95.0f);
-            MinPowerThreshold = MathHelper.Clamp(ini.Get("Power", "MinPowerThreshold").ToSingle(MinPowerThreshold), 1.0f, 50.0f);
-            MaxPowerThreshold = MathHelper.Clamp(ini.Get("Power", "MaxPowerThreshold").ToSingle(MaxPowerThreshold), 50.0f, 99.0f);
+            // Parse DroneNetwork section
+            DroneNetwork.AllowNetworkBroadcasting = ini.Get("DroneNetwork", "AllowNetworkBroadcasting").ToBoolean(DroneNetwork.AllowNetworkBroadcasting);
+            DroneNetwork.DefaultAntennaRange = Math.Max(100.0f, ini.Get("DroneNetwork", "DefaultAntennaRange").ToSingle(DroneNetwork.DefaultAntennaRange));
+            DroneNetwork.NetworkUpdateRate = Math.Max(1.0f, ini.Get("DroneNetwork", "NetworkUpdateRate").ToSingle(DroneNetwork.NetworkUpdateRate));
+            DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks = Math.Max(60, ini.Get("DroneNetwork", "SchedulerAntennaCacheUpdateIntervalTicks").ToInt32(DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks));
+            DroneNetwork.SchedulerMessageThrottlingTicks = Math.Max(1, ini.Get("DroneNetwork", "SchedulerMessageThrottlingTicks").ToInt32(DroneNetwork.SchedulerMessageThrottlingTicks));
+            DroneNetwork.SchedulerMessageReadLimit = Math.Max(1, ini.Get("DroneNetwork", "SchedulerMessageReadLimit").ToInt32(DroneNetwork.SchedulerMessageReadLimit));
+            DroneNetwork.DroneMessageThrottlingTicks = Math.Max(1, ini.Get("DroneNetwork", "DroneMessageThrottlingTicks").ToInt32(DroneNetwork.DroneMessageThrottlingTicks));
+            DroneNetwork.MessageRetentionTicks = Math.Max(600, ini.Get("DroneNetwork", "MessageRetentionTicks").ToInt32(DroneNetwork.MessageRetentionTicks));
+            DroneNetwork.MessageCleanupIntervalTicks = Math.Max(60, ini.Get("DroneNetwork", "MessageCleanupIntervalTicks").ToInt32(DroneNetwork.MessageCleanupIntervalTicks));
 
-            // Parse Network section
-            AllowNetworkBroadcasting = ini.Get("Network", "AllowNetworkBroadcasting").ToBoolean(AllowNetworkBroadcasting);
-            DefaultAntennaRange = Math.Max(100.0f, ini.Get("Network", "DefaultAntennaRange").ToSingle(DefaultAntennaRange));
-            NetworkUpdateRate = Math.Max(1.0f, ini.Get("Network", "NetworkUpdateRate").ToSingle(NetworkUpdateRate));
+            var serializationMode = ini.Get("DroneNetwork", "MessageSerializationMode").ToString("ProtoBuf");
+            MessageSerializationMode mode;
+            if (Enum.TryParse<MessageSerializationMode>(serializationMode, true, out mode))
+            {
+                DroneNetwork.MessageSerializationMode = mode;
+            }
+
+            // Parse LogisticsComputer section
+            LogisticsComputer.AllowLogistics = ini.Get("LogisticsComputer", "AllowLogistics").ToBoolean(LogisticsComputer.AllowLogistics);
+            LogisticsComputer.AllowNetworkPush = ini.Get("LogisticsComputer", "AllowNetworkPush").ToBoolean(LogisticsComputer.AllowNetworkPush);
+            LogisticsComputer.AllowNetworkRequests = ini.Get("LogisticsComputer", "AllowNetworkRequests").ToBoolean(LogisticsComputer.AllowNetworkRequests);
+            LogisticsComputer.MinPushFrequencyTicks = Math.Max(60, ini.Get("LogisticsComputer", "MinPushFrequencyTicks").ToInt32(LogisticsComputer.MinPushFrequencyTicks));
+            LogisticsComputer.MaxPushFrequencyTicks = Math.Max(LogisticsComputer.MinPushFrequencyTicks, ini.Get("LogisticsComputer", "MaxPushFrequencyTicks").ToInt32(LogisticsComputer.MaxPushFrequencyTicks));
 
             // Parse Logging section
-            EnableDebugLogging = ini.Get("Logging", "EnableDebugLogging").ToBoolean(EnableDebugLogging);
-            Logging.LogPathfinding = ini.Get("Logging", "LogPathfinding").ToBoolean(LogPathfinding);
-            LogConstruction = ini.Get("Logging", "LogConstruction").ToBoolean(LogConstruction);
-            LogPowerManagement = ini.Get("Logging", "LogPowerManagement").ToBoolean(LogPowerManagement);
-            LogPerformance = ini.Get("Logging", "LogPerformance").ToBoolean(LogPerformance);
-
-            // Parse Compatibility section
-            CompatibilityMode = ini.Get("Compatibility", "CompatibilityMode").ToBoolean(CompatibilityMode);
-            SkipVersionChecks = ini.Get("Compatibility", "SkipVersionChecks").ToBoolean(SkipVersionChecks);
-            AllowLegacyConfig = ini.Get("Compatibility", "AllowLegacyConfig").ToBoolean(AllowLegacyConfig);
+            var logLevelStr = ini.Get("Logging", "LogLevel").ToString("Info");
+            LogLevel logLevel;
+            if (Enum.TryParse<LogLevel>(logLevelStr, true, out logLevel))
+            {
+                Logging.LogLevel = logLevel;
+            }
+            Logging.LogPathfinding = ini.Get("Logging", "LogPathfinding").ToBoolean(Logging.LogPathfinding);
+            Logging.LogDroneNetwork = ini.Get("Logging", "LogDroneNetwork").ToBoolean(Logging.LogDroneNetwork);
+            Logging.LogDroneOrders = ini.Get("Logging", "LogDroneOrders").ToBoolean(Logging.LogDroneOrders);
         }
 
-
-        public static bool CanPlayerCreateDroneController(long playerId)
+        public bool CanPlayerCreateDroneController(long playerId)
         {
             if (BlockLimits.MaxDroneControllersPerPlayer < 0) return true;
 
@@ -323,52 +396,56 @@ namespace ImprovedAI.Config
             {
                 foreach (var constructor in IAISession.Instance.AIDroneControllers.Values)
                 {
-                    var slim = (IMySlimBlock)constructor;
-                    if (slim.OwnerId == playerId)
+                    var entity = constructor.Entity as IMyCubeBlock;
+                    if (entity != null && entity.OwnerId == playerId)
                         playerConstructorCount++;
                 }
             }
 
             return playerConstructorCount < BlockLimits.MaxDroneControllersPerPlayer;
         }
-        public static bool CanPlayerCreateScheduler(long playerId)
+
+        public bool CanPlayerCreateScheduler(long playerId)
         {
             if (BlockLimits.MaxSchedulersPerPlayer < 0) return true;
 
             int playerSchedulerCount = 0;
             if (IAISession.Instance?.AIDroneSchedulers != null)
             {
-                foreach (var constructor in IAISession.Instance.AIDroneSchedulers.Values)
+                foreach (var scheduler in IAISession.Instance.AIDroneSchedulers.Values)
                 {
-                    var slim = (IMySlimBlock)constructor;
-                    if (slim.OwnerId == playerId)
+                    var entity = scheduler.Entity as IMyCubeBlock;
+                    if (entity != null && entity.OwnerId == playerId)
                         playerSchedulerCount++;
                 }
             }
 
-            return playerSchedulerCount < BlockLimits.MaxDroneControllersPerPlayer;
+            return playerSchedulerCount < BlockLimits.MaxSchedulersPerPlayer;
         }
 
-        public static bool CanFactionCreateScheduler(long factionId)
+        public bool CanFactionCreateScheduler(long factionId)
         {
             if (BlockLimits.MaxSchedulersPerFaction <= 0) return true;
 
-            int factionConstructorCount = 0;
+            int factionSchedulerCount = 0;
             if (IAISession.Instance?.AIDroneSchedulers != null)
             {
-                foreach (var constructor in IAISession.Instance.AIDroneSchedulers.Values)
+                foreach (var scheduler in IAISession.Instance.AIDroneSchedulers.Values)
                 {
-                    var slim = (IMySlimBlock)constructor;
-                    var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(slim.OwnerId);
-
-                    if (faction?.FactionId == factionId)
-                        factionConstructorCount++;
+                    var entity = scheduler.Entity as IMyCubeBlock;
+                    if (entity != null)
+                    {
+                        var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(entity.OwnerId);
+                        if (faction?.FactionId == factionId)
+                            factionSchedulerCount++;
+                    }
                 }
             }
 
-            return factionConstructorCount < BlockLimits.MaxSchedulersPerFaction;
+            return factionSchedulerCount < BlockLimits.MaxSchedulersPerFaction;
         }
-        public static bool CanFactionCreateDroneController(long factionId)
+
+        public bool CanFactionCreateDroneController(long factionId)
         {
             if (BlockLimits.MaxDroneControllersPerFaction <= 0) return true;
 
@@ -377,28 +454,31 @@ namespace ImprovedAI.Config
             {
                 foreach (var constructor in IAISession.Instance.AIDroneControllers.Values)
                 {
-                    var slim = (IMySlimBlock)constructor;
-                    var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(slim.OwnerId);
-
-                    if (faction?.FactionId == factionId)
-                        factionConstructorCount++;
+                    var entity = constructor.Entity as IMyCubeBlock;
+                    if (entity != null)
+                    {
+                        var faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(entity.OwnerId);
+                        if (faction?.FactionId == factionId)
+                            factionConstructorCount++;
+                    }
                 }
             }
 
             return factionConstructorCount < BlockLimits.MaxDroneControllersPerFaction;
         }
 
-
-        //public static string GetConfigSummary()
-        //{
-        //    var summary = "=== BetterAI Constructor Server Config ===\n";
-        //    summary += $"Max per Player: {(MaxConstructorsPerPlayer > 0 ? MaxConstructorsPerPlayer.ToString() : "Unlimited")}\n";
-        //    summary += $"Max per Faction: {(MaxConstructorsPerFaction > 0 ? MaxConstructorsPerFaction.ToString() : "Unlimited")}\n";
-        //    summary += $"Max Total: {(MaxConstructorsTotal > 0 ? MaxConstructorsTotal.ToString() : "Unlimited")}\n";
-        //    summary += $"Current Total: {IAISession.Instance?.AIConstructors?.Count ?? 0}\n";
-        //    summary += $"Pathfinding: {(AllowAStar ? "Advanced" : AllowObstacleAvoidance ? "Sensors" : "Basic")}\n";
-        //    summary += $"Safety Limits: {(EnableSafetyLimits ? "Enabled" : "Disabled")}\n";
-        //    return summary;
-        //}
+        public string GetConfigSummary()
+        {
+            var summary = "=== ImprovedAI Server Config ===\n";
+            summary += $"Schedulers - Max per Player: {(BlockLimits.MaxSchedulersPerPlayer > 0 ? BlockLimits.MaxSchedulersPerPlayer.ToString() : "Unlimited")}\n";
+            summary += $"Schedulers - Max per Faction: {(BlockLimits.MaxSchedulersPerFaction > 0 ? BlockLimits.MaxSchedulersPerFaction.ToString() : "Unlimited")}\n";
+            summary += $"Drone Controllers - Max per Player: {(BlockLimits.MaxDroneControllersPerPlayer > 0 ? BlockLimits.MaxDroneControllersPerPlayer.ToString() : "Unlimited")}\n";
+            summary += $"Drone Controllers - Max per Faction: {(BlockLimits.MaxDroneControllersPerFaction > 0 ? BlockLimits.MaxDroneControllersPerFaction.ToString() : "Unlimited")}\n";
+            summary += $"Current Schedulers: {IAISession.Instance?.AIDroneSchedulers?.Count ?? 0}\n";
+            summary += $"Current Drone Controllers: {IAISession.Instance?.AIDroneControllers?.Count ?? 0}\n";
+            summary += $"Pathfinding: {(Pathfinding.AllowAStar ? "Advanced" : Pathfinding.AllowObstacleAvoidance ? "Sensors" : "Basic")}\n";
+            summary += $"Logistics: {(LogisticsComputer.AllowLogistics ? "Enabled" : "Disabled")}\n";
+            return summary;
+        }
     }
 }

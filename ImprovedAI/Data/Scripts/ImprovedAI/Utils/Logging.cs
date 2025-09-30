@@ -16,10 +16,10 @@ namespace ImprovedAI.Utils.Logging
     {
         private static LoggingEngine _logger;
         private static readonly object _lock = new object();
-        public static readonly LogLevel LogLevel = ServerConfig.Logging.LogLevel;
-        public static readonly bool logPathfinding = ServerConfig.Logging.LogPathfinding;
-        public static readonly bool logDroneNetwork = ServerConfig.Logging.LogDroneNetwork;
-        public static readonly bool logDroneOrders = ServerConfig.Logging.LogDroneOrders;
+        public static readonly LogLevel LogLevel = ServerConfig.Instance.Logging.LogLevel;
+        public static readonly bool logPathfinding = ServerConfig.Instance.Logging.LogPathfinding;
+        public static readonly bool logDroneNetwork = ServerConfig.Instance.Logging.LogDroneNetwork;
+        public static readonly bool logDroneOrders = ServerConfig.Instance.Logging.LogDroneOrders;
 
         /// <summary>
         /// Initialize the logging system
@@ -119,7 +119,7 @@ namespace ImprovedAI.Utils.Logging
             if (_logger == null) return false;
 
             // Check if the current log level allows this message
-            return level >= ServerConfig.Logging.LogLevel;
+            return level >= ServerConfig.Instance.Logging.LogLevel;
         }
     }
 
