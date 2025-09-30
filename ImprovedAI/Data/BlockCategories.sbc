@@ -6,13 +6,13 @@
             <TypeId>GuiBlockCategoryDefinition</TypeId>
             <SubtypeId/>
          </Id>
-         <DisplayName>Better AI</DisplayName>
-         <Name>Better AI</Name>
+         <DisplayName>Improved AI</DisplayName>
+         <Name>Improved AI</Name>
          <ItemIds>
 			<string>RemoteControl/ImprovedAILargeDroneController</string>
             <string>RemoteControl/ImprovedAISmallDroneController</string>
 			 <string>BroadcastController/ImprovedAILargeScheduler</string>
-			 <string>TimerBlock/ImprovedAILargeLogisticsComputer</string>
+			 <string>MyProgrammableBlock/ImprovedAILargeLogisticsComputer</string>
 		 </ItemIds>
       </Category>
       
@@ -47,7 +47,7 @@
 		   <DisplayName>DisplayName_Category_LargeBlocks</DisplayName>
 		   <Name>LargeBlocks</Name>
 		   <ItemIds>
-			   <string>TimerBlock/ImprovedAILargeLogisticsComputer</string>
+			   <string>MyProgrammableBlock/ImprovedAILargeLogisticsComputer</string>
 		   </ItemIds>
 	   </Category>
       

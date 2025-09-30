@@ -82,7 +82,7 @@ namespace ImprovedAI.Network
             public long SenderOwnerId;
         }
 
-        private readonly MessageSerializationMode serializationMode = ServerConfig.DroneNetwork.MessageSerializationMode;
+        private readonly MessageSerializationMode serializationMode = ServerConfig.Instance.DroneNetwork.MessageSerializationMode;
 
         // Antenna cache - updated when entities register/update
         private readonly MyConcurrentDictionary<long, AntennaCache> _antennaCache;
@@ -98,12 +98,12 @@ namespace ImprovedAI.Network
         private readonly TimeSpan _messageExpiration;
         private readonly object _cleanupLock = new object();
         private DateTime _lastCleanup = DateTime.UtcNow;
-        private readonly TimeSpan _cleanupInterval = TimeUtil.TickToTimeSpan(ServerConfig.DroneNetwork.MessageCleanupIntervalTicks);
+        private readonly TimeSpan _cleanupInterval = TimeUtil.TickToTimeSpan(ServerConfig.Instance.DroneNetwork.MessageCleanupIntervalTicks);
         private int _messageCounter = 0;
 
         public MessageQueue()
         {
-            _messageExpiration = TimeUtil.TickToTimeSpan(ServerConfig.DroneNetwork.MessageRetentionTicks);
+            _messageExpiration = TimeUtil.TickToTimeSpan(ServerConfig.Instance.DroneNetwork.MessageRetentionTicks);
 
             _antennaCache = new MyConcurrentDictionary<long, AntennaCache>();
             _topicQueues = new MyConcurrentDictionary<ushort, MyConcurrentQueue<TimestampedMessage>>();

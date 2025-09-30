@@ -54,16 +54,16 @@ namespace ImprovedAI
         private long _lastAntennaCacheUpdateFrame = 0;
 
         // Server settings
-        private readonly int _initializingUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Initializing;
-        private readonly int _errorUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Error;
-        private readonly int _standbyUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Standby;
-        private readonly int _scanningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Scanning;
-        private readonly int _assigningUpdateIntervalTicks = SchedulerBounds.StateUpdateIntervalTicks.Assigning;
-        private readonly int _scanRetryIntervalTicks = SchedulerBounds.ScanDelayTicks;
-        private readonly int _errorRecoveryIntervalTicks = SchedulerBounds.ErrorRecoveryIntervalTicks;
-        private readonly int _maxConsecutiveErrors = SchedulerBounds.MaxConsecutiveErrors;
-        private readonly int _maintenanceIntervalTicks = SchedulerBounds.ManintenanceIntervalTicks;
-        private readonly int _antennaCacheUpdateIntervalTicks = DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks;
+        private readonly int _initializingUpdateIntervalTicks = ServerConfig.Instance.SchedulerBounds.StateUpdateIntervalTicks.Initializing;
+        private readonly int _errorUpdateIntervalTicks = ServerConfig.Instance.SchedulerBounds.StateUpdateIntervalTicks.Error;
+        private readonly int _standbyUpdateIntervalTicks = ServerConfig.Instance.SchedulerBounds.StateUpdateIntervalTicks.Standby;
+        private readonly int _scanningUpdateIntervalTicks = ServerConfig.Instance.SchedulerBounds.StateUpdateIntervalTicks.Scanning;
+        private readonly int _assigningUpdateIntervalTicks = ServerConfig.Instance.SchedulerBounds.StateUpdateIntervalTicks.Assigning;
+        private readonly int _scanRetryIntervalTicks = ServerConfig.Instance.SchedulerBounds.ScanDelayTicks;
+        private readonly int _errorRecoveryIntervalTicks = ServerConfig.Instance.SchedulerBounds.ErrorRecoveryIntervalTicks;
+        private readonly int _maxConsecutiveErrors = ServerConfig.Instance.SchedulerBounds.MaxConsecutiveErrors;
+        private readonly int _maintenanceIntervalTicks = ServerConfig.Instance.SchedulerBounds.ManintenanceIntervalTicks;
+        private readonly int _antennaCacheUpdateIntervalTicks = ServerConfig.Instance.DroneNetwork.SchedulerAntennaCacheUpdateIntervalTicks;
         /// <summary>
         /// Timeout after which drones are removed if we don't hear from them again.
         /// </summary>
@@ -85,7 +85,7 @@ namespace ImprovedAI
         };
 
         private MessageQueue messaging = new MessageQueue();
-        private int messageReadLimit = ServerConfig.DroneNetwork.SchedulerMessageReadLimit;
+        private int messageReadLimit = ServerConfig.Instance.DroneNetwork.SchedulerMessageReadLimit;
         private IMyEntity Entity;
         private IMyRadioAntenna ownAntenna;
         private int broadcastUpdatesChannel = 1;
@@ -128,11 +128,11 @@ namespace ImprovedAI
             this.operationMode = operationMode;
             this.workModes = workModes;
 
-            _maxTasksAssignedPerBatch = MaxTasksAssignedPerBatch > SchedulerBounds.MaxTaskAssignmentPerBatch
-                ? SchedulerBounds.MaxTaskAssignmentPerBatch
+            _maxTasksAssignedPerBatch = MaxTasksAssignedPerBatch > ServerConfig.Instance.SchedulerBounds.MaxTaskAssignmentPerBatch
+                ? ServerConfig.Instance.SchedulerBounds.MaxTaskAssignmentPerBatch
                 : MaxTasksAssignedPerBatch;
 
-            _perScanLimits = PerScanLimits > SchedulerBounds.PerScanLimit ? SchedulerBounds.PerScanLimit : PerScanLimits;
+            _perScanLimits = PerScanLimits > ServerConfig.Instance.SchedulerBounds.PerScanLimit ? ServerConfig.Instance.SchedulerBounds.PerScanLimit : PerScanLimits;
         }
 
 
