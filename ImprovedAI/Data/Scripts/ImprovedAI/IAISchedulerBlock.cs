@@ -1,12 +1,9 @@
-﻿using ImprovedAI;
-using ImprovedAI.Utils.Logging;
+﻿using ImprovedAI.Utils.Logging;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
 using System;
-using VRage.Game;
 using VRage.Game.Components;
-using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 

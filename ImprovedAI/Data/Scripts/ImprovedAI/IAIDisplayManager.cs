@@ -1,14 +1,4 @@
-﻿using Sandbox.ModAPI;
-using SpaceEngineers.Game.ModAPI;
-using System;
-using System.Collections.Generic;
-using System.Text;
-using VRage.Game;
-using VRage.Game.ModAPI;
-using VRage.Utils;
-using VRageMath;
-
-namespace ImprovedAI
+﻿namespace ImprovedAI
 {
     public enum DisplayManagerOperationMode
     {

@@ -1,10 +1,8 @@
-﻿using ImprovedAI.BlockConfig;
-using ImprovedAI.Config;
+﻿using ImprovedAI.Config;
 using ImprovedAI.Messages;
 using ImprovedAI.Network;
 using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
-using ProtoBuf;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -15,7 +13,6 @@ using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 using VRageMath;
-using static ImprovedAI.Config.ServerConfig;
 using static ImprovedAI.Scheduler;
 
 namespace ImprovedAI

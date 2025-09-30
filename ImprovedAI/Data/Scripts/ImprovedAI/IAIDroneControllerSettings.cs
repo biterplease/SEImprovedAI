@@ -1,9 +1,4 @@
-﻿using EmptyKeys.UserInterface.Generated.DataTemplatesEditFaction_Bindings;
-using Sandbox.ModAPI;
-using VRage.Game.ModAPI.Ingame.Utilities;
-using VRageMath;
-
-using static ImprovedAI.Drone;
+﻿using static ImprovedAI.Drone;
 
 namespace ImprovedAI
 {

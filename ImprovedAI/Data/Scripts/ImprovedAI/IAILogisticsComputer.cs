@@ -1,5 +1,4 @@
-﻿using ImprovedAI.Config;
-using ImprovedAI.Messages;
+﻿using ImprovedAI.Messages;
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;

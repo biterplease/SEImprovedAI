@@ -1,6 +1,5 @@
 ﻿using System;
 
-
 namespace ImprovedAI.Utils
 {
     public static class TimeUtil

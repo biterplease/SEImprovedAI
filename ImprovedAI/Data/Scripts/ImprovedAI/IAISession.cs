@@ -1,10 +1,6 @@
-﻿using BetterAIConstructor.UI;
-using EmptyKeys.UserInterface.Generated.DataTemplatesContracts_Bindings;
-using ImprovedAI.Config;
-using ImprovedAI.Data.Scripts.ImprovedAI;
+﻿using ImprovedAI.Config;
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
-using Sandbox.Definitions;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -212,8 +208,6 @@ namespace ImprovedAI
                 // Reset message queue singleton
                 MessageQueue.Reset();
 
-                // Unload terminal controls
-                TerminalControls.Unload();
 
                 // Remove localization texts
                 MyAPIGateway.Gui.GuiControlRemoved -= GuiControlRemoved;

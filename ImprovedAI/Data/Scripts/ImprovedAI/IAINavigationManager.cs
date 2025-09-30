@@ -1,11 +1,3 @@
-using ImprovedAI.Config;
-using ImprovedAI.Pathfinding;
-using Sandbox.ModAPI.Ingame;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using VRageMath;
-
 namespace ImprovedAI.Navigation
 {
     public class NavigationManager
