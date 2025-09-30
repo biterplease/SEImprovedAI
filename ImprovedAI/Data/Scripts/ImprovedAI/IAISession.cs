@@ -6,6 +6,8 @@ using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
+using System.IO;
+using VRage;
 using VRage.Game.Components;
 using VRage.Utils;
 
@@ -25,7 +27,7 @@ namespace ImprovedAI
         private int _updateInterval = ServerConfig.Session.UpdateInterval;
         private int updateCounter = 0;
         private const int UPDATE_INTERVAL = 60;
-        private static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
+        public static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
 
         // Collection of all AI blocks in the world
         public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
@@ -35,6 +37,9 @@ namespace ImprovedAI
         public override void LoadData()
         {
             Instance = this;
+            // Localization settings
+            LoadLangOverrides();
+            MyAPIGateway.Gui.GuiControlRemoved += GuiControlRemoved;
         }
 
         public void Init()
@@ -192,10 +197,13 @@ namespace ImprovedAI
                 AILogisticsComputers.Clear();
 
                 // Reset message queue singleton
-                Network.MessageQueue.Reset();
+                MessageQueue.Reset();
 
                 // Unload terminal controls
                 TerminalControls.Unload();
+
+                // Remove localization texts
+                MyAPIGateway.Gui.GuiControlRemoved -= GuiControlRemoved;
 
                 Instance = null;
                 Log.Info("Mod unloaded");
@@ -212,6 +220,27 @@ namespace ImprovedAI
                     writer.Flush();
                     writer.Close();
                 }
+            }
+        }
+
+        void LoadLangOverrides()
+        {
+            string folder = Path.Combine(ModContext.ModPathData, "Localization");
+
+            // this method loads all MyCommonTexts/MyCoreTexts/MyTexts prefixed files from the given folder.
+            // if culture is not null it would also load the same prefixed files with `Prefix.Culture.resx`
+            // if culture and subculture are not null, aside from loading the culture one it also loads `Prefix.Culture-Subculture.resx`.
+            MyTexts.LoadTexts(folder, cultureName: "override", subcultureName: null);
+        }
+        void GuiControlRemoved(object screen)
+        {
+            if (screen == null)
+                return;
+
+            // detect when options menu is closed in case player changes language
+            if (screen.ToString().EndsWith("ScreenOptionsSpace"))
+            {
+                LoadLangOverrides();
             }
         }
     }

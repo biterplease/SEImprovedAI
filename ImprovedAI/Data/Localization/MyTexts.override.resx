@@ -1,0 +1,41 @@
+﻿﻿<?xml version="1.0" encoding="utf-8"?>
+<root>
+
+	<resheader name="resmimetype">
+		<value>text/microsoft-resx</value>
+	</resheader>
+	<resheader name="version">
+		<value>2.0</value>
+	</resheader>
+	<resheader name="reader">
+		<value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+	</resheader>
+	<resheader name="writer">
+		<value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+	</resheader>
+
+	<data name="Iron" xml:space="preserve">
+    <value>Ironman</value>
+	 </data>
+	<data name="DisplayName_Block_ImprovedAISmallDroneController" xml:space="preserve">
+		<value>Improved AI Small Drone Controller</value>
+	</data>
+	<data name="DisplayName_Block_ImprovedAILargeDroneController" xml:space="preserve">
+		<value>Improved AI Large Drone Controller</value>
+	</data>
+	<data name="Description_ImprovedAIDroneController" xml:space="preserve">
+		<value>Advanced AI drone controller with various capabilities.</value>
+	</data>
+	<data name="DisplayName_Block_ImprovedAILargeScheduler" xml:space="preserve">
+		<value>Improved AI Large Scheduler</value>
+	</data>
+	<data name="Description_ImprovedAIScheduler" xml:space="preserve">
+		<value>Advanced AI drone scheduler for distributing actions to multiple drones.</value>
+	</data>
+	<data name="DisplayName_Block_ImprovedAILargeLogisticsComputer" xml:space="preserve">
+		<value>Improved AI Large Logistics Computer</value>
+	</data>
+	<data name="Description_ImprovedAILogisticsComputer" xml:space="preserve">
+		<value>Enables a grid to access the IAI logistics network.</value>
+	</data>
+</root>

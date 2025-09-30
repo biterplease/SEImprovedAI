@@ -7,8 +7,8 @@
 				<TypeId>RemoteControl</TypeId>
 				<SubtypeId>ImprovedAISmallDroneController</SubtypeId>
 			</Id>
-			<DisplayName>AI Constructor (Small)</DisplayName>
-			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
+			<DisplayName>DisplayName_Block_ImprovedAISmallDroneController</DisplayName>
+			<Description>Description_ImprovedAIDroneController</Description>
 			<Icon>Textures\GUI\Icons\Cubes\RemoteControl.dds</Icon>
 			<CubeSize>Small</CubeSize>
 			<BlockTopology>TriangleMesh</BlockTopology>
@@ -30,7 +30,7 @@
 				<Model BuildPercentUpperBound="0.50" File="Models\Cubes\Small\RemoteControlConstruction_1.mwm" />
 				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Small\RemoteControlConstruction_2.mwm" />
 			</BuildProgressModels>
-			<BlockPairName>BetterAI_Constructor</BlockPairName>
+			<BlockPairName>ImprovedAIDroneController</BlockPairName>
 			<MirroringY>Z</MirroringY>
 			<MirroringZ>Y</MirroringZ>
 			<EdgeType>Light</EdgeType>
@@ -46,8 +46,8 @@
 				<TypeId>RemoteControl</TypeId>
 				<SubtypeId>ImprovedAILargeDroneController</SubtypeId>
 			</Id>
-			<DisplayName>AI Constructor (Large)</DisplayName>
-			<Description>Advanced AI construction drone controller with intelligent pathfinding and automated construction capabilities.</Description>
+			<DisplayName>DisplayName_Block_ImprovedAILargeDroneController</DisplayName>
+			<Description>Description_ImprovedAIDroneController</Description>
 			<Icon>Textures\GUI\Icons\Cubes\RemoteControl.dds</Icon>
 			<CubeSize>Large</CubeSize>
 			<BlockTopology>TriangleMesh</BlockTopology>
@@ -69,7 +69,7 @@
 				<Model BuildPercentUpperBound="0.50" File="Models\Cubes\Large\RemoteControlConstruction_1.mwm" />
 				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\RemoteControlConstruction_2.mwm" />
 			</BuildProgressModels>
-			<BlockPairName>BetterAI_Constructor</BlockPairName>
+			<BlockPairName>ImprovedAIDroneController</BlockPairName>
 			<MirroringY>Z</MirroringY>
 			<MirroringZ>Y</MirroringZ>
 			<EdgeType>Light</EdgeType>
@@ -85,9 +85,9 @@
 				<TypeId>BroadcastController</TypeId>
 				<SubtypeId>ImprovedAILargeScheduler</SubtypeId>
 			</Id>
-			<DisplayName>DisplayName_Block_BroadcastController</DisplayName>
+			<DisplayName>DisplayName_Block_ImprovedAILargeScheduler</DisplayName>
+			<Description>Description_ImprovedAIScheduler</Description>
 			<Icon>Textures\GUI\Icons\Cubes\Broadcast.dds</Icon>
-			<Description>Description_BroadcastController</Description>
 			<CubeSize>Large</CubeSize>
 			<GuiVisible>false</GuiVisible>
 			<BlockTopology>TriangleMesh</BlockTopology>
@@ -119,7 +119,6 @@
 				<Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\BroadcastConstruction2.mwm" />
 				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\BroadcastConstruction3.mwm" />
 			</BuildProgressModels>
-			<BlockPairName>BroadcastController</BlockPairName>
 			<EdgeType>Light</EdgeType>
 			<BuildTimeSeconds>60</BuildTimeSeconds>
 			<MirroringY>Z</MirroringY>
@@ -131,51 +130,57 @@
 			<EmissiveColorPreset>Extended</EmissiveColorPreset>
 			<DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>
 			<DestroySound>WepSmallWarheadExpl</DestroySound>
-			<PCU>25</PCU>
+			<PCU>250</PCU>
 		</Definition>
-		<Definition xsi:type="MyObjectBuilder_TimerBlockDefinition">
+		<Definition xsi:type="MyObjectBuilder_ProgrammableBlockDefinition">
 			<Id>
-				<TypeId>TimerBlock</TypeId>
+				<TypeId>MyProgrammableBlock</TypeId>
 				<SubtypeId>ImprovedAILargeLogisticsComputer</SubtypeId>
 			</Id>
-			<DisplayName>DisplayName_Block_TimerBlock</DisplayName>
-			<Icon>Textures\GUI\Icons\Cubes\TimerBlock.dds</Icon>
-			<Description>Description_Timer</Description>
+			<Public>true</Public>
+			<DisplayName>DisplayName_Block_ImprovedAILargeLogisticsComputer</DisplayName>
+			<Icon>Textures\GUI\Icons\Cubes\ProgrammingBlock.dds</Icon>
+			<Description>Description_ImprovedAILogisticsComputer</Description>
 			<CubeSize>Large</CubeSize>
-			<GuiVisible>false</GuiVisible>
 			<BlockTopology>TriangleMesh</BlockTopology>
 			<Size x="1" y="1" z="1" />
 			<ModelOffset x="0" y="0" z="0" />
-			<Model>Models\Cubes\Large\TimerBlock.mwm</Model>
+			<Model>Models\Cubes\Large\ProgrammingBlock.mwm</Model>
 			<Components>
-				<Component Subtype="InteriorPlate" Count="6" />
-				<Component Subtype="Construction" Count="20" />
-				<Component Subtype="Computer" Count="5" />
-				<Component Subtype="Construction" Count="10" />
+				<Component Subtype="SteelPlate" Count="11" />
+				<Component Subtype="Construction" Count="4" />
+				<Component Subtype="LargeTube" Count="2" />
+				<Component Subtype="Motor" Count="1" />
+				<Component Subtype="Display" Count="1" />
+				<Component Subtype="Computer" Count="2" />
+				<Component Subtype="SteelPlate" Count="10" />
 			</Components>
 			<CriticalComponent Subtype="Computer" Index="0" />
 			<BuildProgressModels>
-				<Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\TimerBlockConstruction_1.mwm" />
-				<Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\TimerBlockConstruction_2.mwm" />
-				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\TimerBlockConstruction_3.mwm" />
+				<Model BuildPercentUpperBound="0.33" File="Models\Cubes\Large\ProgrammingBlockConstruction_1.mwm" />
+				<Model BuildPercentUpperBound="0.66" File="Models\Cubes\Large\ProgrammingBlockConstruction_2.mwm" />
+				<Model BuildPercentUpperBound="1.00" File="Models\Cubes\Large\ProgrammingBlockConstruction_3.mwm" />
 			</BuildProgressModels>
-			<BlockPairName>TimerBlock</BlockPairName>
-			<EdgeType>Light</EdgeType>
-			<ResourceSinkGroup>Utility</ResourceSinkGroup>
-			<BuildTimeSeconds>10</BuildTimeSeconds>
-			<DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
-			<DamagedSound>ParticleElectrical</DamagedSound>
-			<PrimarySound>BlockTimer</PrimarySound>
-			<TimerSoundStart>BlockTimerSignalA</TimerSoundStart>
-			<TimerSoundMid>BlockTimerSignalB</TimerSoundMid>
-			<TimerSoundEnd>BlockTimerSignalC</TimerSoundEnd>
-			<EmissiveColorPreset>Timer</EmissiveColorPreset>
-			<DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>
-			<DestroySound>WepSmallWarheadExpl</DestroySound>
+			<ScreenAreas>
+				<ScreenArea Name="CockpitScreen_02" DisplayName="DisplayName_Screen_Large" TextureResolution="512" ScreenWidth="16" ScreenHeight="10" />
+				<ScreenArea Name="CockpitScreen_01" DisplayName="DisplayName_Screen_Keyboard" TextureResolution="256" ScreenWidth="5" ScreenHeight="2" />
+			</ScreenAreas>
+			<BlockPairName>ProgrammableBlock</BlockPairName>
 			<MirroringY>Z</MirroringY>
 			<MirroringZ>Y</MirroringZ>
-			<PCU>25</PCU>
-			<IsAirTight>true</IsAirTight>
+			<EdgeType>Light</EdgeType>
+			<BuildTimeSeconds>20</BuildTimeSeconds>
+			<MountPoints>
+				<MountPoint Side="Bottom" StartX="0.0" StartY="0" EndX="1.0" EndY="1.0" />
+			</MountPoints>
+			<ResourceSinkGroup>Utility</ResourceSinkGroup>
+			<DamageEffectName>Damage_Electrical_Damaged</DamageEffectName>
+			<DamagedSound>ParticleElectrical</DamagedSound>
+			<EmissiveColorPreset>Default</EmissiveColorPreset>
+			<DestroyEffect>BlockDestroyedExplosion_Large</DestroyEffect>
+			<DestroySound>WepSmallWarheadExpl</DestroySound>
+			<PCU>100</PCU>
+			<IsAirTight>false</IsAirTight>
 		</Definition>
 		<!-- End Improved AI block definitions-->
 	</CubeBlocks>
