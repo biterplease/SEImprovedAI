@@ -119,7 +119,7 @@ namespace ImprovedAI.Utils.Logging
             if (_logger == null) return false;
 
             // Check if the current log level allows this message
-            return level >= ServerConfig.Instance.Logging.LogLevel;
+            return (level & ServerConfig.Instance.Logging.LogLevel) > 0;
         }
     }
 

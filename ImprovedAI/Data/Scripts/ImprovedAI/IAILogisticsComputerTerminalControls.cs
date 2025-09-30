@@ -1,25 +1,47 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Utils;
+using ImprovedAI.Utils.Logging;
 using Sandbox.Game.Localization;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;
 using System;
+using System.Collections.Generic;
+using VRage.Game.ModAPI;
 using VRage.Utils;
 using VRageMath;
 
-namespace ImprovedAI.Data.Scripts.ImprovedAI
+namespace ImprovedAI
 {
     public static class IAILogisticsComputerTerminalControls
     {
-        public const float SATURATION_DELTA = 0.8f;
-        public const float VALUE_DELTA = 0.55f;
-        public const float VALUE_COLORIZE_DELTA = 0.1f;
-
-        public static bool CustomControlsInit = false;
         public static ServerConfig.LogisticsComputerConfig BlockConfig = ServerConfig.Instance.LogisticsComputer;
 
         const string IdPrefix = IAISession.ModName + "_";
         static bool Done = false;
+
+        private static readonly HashSet<string> defaultControlIdsToHide = new HashSet<string>
+        {
+            "Edit",
+            "ConsoleCommand",
+            "TerminalRun",
+            "Recompile",
+        };
+        private static readonly HashSet<string> defaultActionIdsToHide = new HashSet<string>
+        {
+            "Run",
+            "RunWithDefaultArgument",
+        };
+
+        public static void DoOnce(IMyModContext context)
+        {
+            if (Done) return;
+            Done = true;
+
+            HideDefaultControls();
+            HideDefaultActions();
+            CreateControls();
+            Log.Info("Created LC terminal controls");
+        }
 
         /// <summary>
         /// Check an return the GameLogic object
@@ -36,6 +58,40 @@ namespace ImprovedAI.Data.Scripts.ImprovedAI
         {
             // only visible for the blocks having this gamelogic comp
             return b?.GameLogic?.GetAs<IAILogisticsComputerBlock>() != null;
+        }
+
+        /// <summary>
+        /// Hides default controls in the Programmable Block.
+        /// </summary>
+        public static void HideDefaultControls()
+        {
+            List<IMyTerminalControl> controls;
+            MyAPIGateway.TerminalControls.GetControls<IMyProgrammableBlock>(out controls);
+
+            foreach (IMyTerminalControl c in controls)
+            {
+                if (defaultControlIdsToHide.Contains(c.Id))
+                {
+                    c.Visible = TerminalChainedDelegate.Create(c.Enabled, CustomVisibleCondition);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Hides default actions in the Programmable Block.
+        /// </summary>
+        public static void HideDefaultActions()
+        {
+            List<IMyTerminalAction> actions;
+            MyAPIGateway.TerminalControls.GetActions<IMyProgrammableBlock>(out actions);
+
+            foreach (IMyTerminalAction a in actions)
+            {
+                if (defaultActionIdsToHide.Contains(a.Id))
+                {
+                    a.Enabled = TerminalChainedDelegate.Create(a.Enabled, CustomVisibleCondition);
+                }
+            }
         }
 
         /// <summary>

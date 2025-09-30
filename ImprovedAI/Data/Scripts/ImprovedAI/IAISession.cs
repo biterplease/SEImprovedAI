@@ -2,6 +2,9 @@
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
+using Sandbox.ModAPI.Interfaces;
+using Sandbox.ModAPI.Interfaces.Terminal;
+using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -15,7 +18,7 @@ namespace ImprovedAI
     public class IAISession : MySessionComponentBase
     {
         public static IAISession Instance;
-        public static ServerConfig _serverConfig;
+        private static ServerConfig _serverConfig;
 
         // Shared message queue for all AI components
         public MessageQueue MessageQueue { get; private set; }
@@ -23,7 +26,7 @@ namespace ImprovedAI
         // Mod-wide settings and management
         private bool isInitialized = false;
         private long _lastUpdateFrame = 0;
-        private int _updateInterval = _serverConfig.Session.UpdateInterval;
+        private int _updateInterval; // DON'T initialize here - will be set in Init()
         private int updateCounter = 0;
         private const int UPDATE_INTERVAL = 60;
         public static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
@@ -34,7 +37,7 @@ namespace ImprovedAI
         public Dictionary<long, IAISchedulerBlock> AIDroneSchedulers = new Dictionary<long, IAISchedulerBlock>();
         public Dictionary<long, IAILogisticsComputerBlock> AILogisticsComputers = new Dictionary<long, IAILogisticsComputerBlock>();
 
-        public  ServerConfig GetConfig()
+        public ServerConfig GetConfig()
         {
             return _serverConfig;
         }
@@ -46,21 +49,121 @@ namespace ImprovedAI
             LoadLangOverrides();
             MyAPIGateway.Gui.GuiControlRemoved += GuiControlRemoved;
         }
-
-        public void Init()
+        public IAISession()
         {
-            Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
-            MessageQueue = MessageQueue.Instance;
-            _serverConfig = ServerConfig.Instance;
-            ServerConfig.Instance.LoadConfig();
-            Log.Info("Mod loaded successfully");
-
-
-
-            isInitialized = true;
+            try
+            {
+                MyLog.Default.WriteLineAndConsole("ImprovedAI: Instance constructor called");
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLineAndConsole($"ImprovedAI: Instance constructor failed: {ex}");
+            }
         }
 
+        private void Init()
+        {
+            try
+            {
+                Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
+                Log.Info("=== ImprovedAI Initializing ===");
 
+
+                MessageQueue = MessageQueue.Instance;
+                _serverConfig = ServerConfig.Instance;
+                _serverConfig.LoadConfig();
+                Log.Info("Log level: {0}", _serverConfig.Logging.LogLevel.ToString());
+
+                _updateInterval = _serverConfig.Session.UpdateInterval;
+
+                Log.Info("Mod loaded successfully");
+                Log.Info("Update interval: {0} ticks", _updateInterval);
+
+                //LogAllTerminalControlClasses();
+
+                isInitialized = true;
+            }
+            catch (Exception ex)
+            {
+                MyLog.Default.WriteLine($"ImprovedAI: Init exception: {ex}");
+            }
+        }
+        //static void LogAllTerminalControlClasses()
+        //{
+
+        //    List<IMyTerminalControl> broadcastControllerControls;
+        //    MyAPIGateway.TerminalControls.GetControls<IMyBroadcastController>(out broadcastControllerControls);
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+
+        //    MyLog.Default.WriteLine($"[DEV] BROADCAST CONTROLLER TERMINAL CONTROS:");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    foreach (IMyTerminalControl c in broadcastControllerControls)
+        //    {
+        //        // a quick way to dump all IDs to SE's log
+        //        string name = MyTexts.GetString((c as IMyTerminalControlTitleTooltip)?.Title.String ?? "N/A");
+        //        string valueType = (c as ITerminalProperty)?.TypeName ?? "N/A";
+        //        MyLog.Default.WriteLine($"[DEV] terminal property: id='{c.Id}'; type='{c.GetType().Name}'; valueType='{valueType}'; displayName='{name}'");
+        //    }
+
+        //    List<IMyTerminalAction> bcActions;
+        //    MyAPIGateway.TerminalControls.GetActions<IMyBroadcastController>(out bcActions);
+        //    foreach (IMyTerminalAction a in bcActions)
+        //    {
+        //        MyLog.Default.WriteLine($"[DEV] toolbar action: id='{a.Id}'; displayName='{a.Name}'");
+        //    }
+
+        //        MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"[DEV] PROGRAMMABLE BLOCK CONTROLS:");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    List<IMyTerminalControl> pbControls;
+        //    MyAPIGateway.TerminalControls.GetControls<IMyProgrammableBlock>(out pbControls);
+
+        //    foreach (IMyTerminalControl c in pbControls)
+        //    {
+        //        // a quick way to dump all IDs to SE's log
+        //        string name = MyTexts.GetString((c as IMyTerminalControlTitleTooltip)?.Title.String ?? "N/A");
+        //        string valueType = (c as ITerminalProperty)?.TypeName ?? "N/A";
+        //        MyLog.Default.WriteLine($"[DEV] terminal property: id='{c.Id}'; type='{c.GetType().Name}'; valueType='{valueType}'; displayName='{name}'");
+        //    }
+        //    List<IMyTerminalAction> pbActions;
+        //    MyAPIGateway.TerminalControls.GetActions<IMyProgrammableBlock>(out pbActions);
+        //    foreach (IMyTerminalAction a in pbActions)
+        //    {
+        //        MyLog.Default.WriteLine($"[DEV] toolbar action: id='{a.Id}'; displayName='{a.Name}'");
+        //    }
+
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"[DEV] REMOTE CONTROL BLOCK CONTROLS:");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    List<IMyTerminalControl> rcControls;
+        //    MyAPIGateway.TerminalControls.GetControls<IMyRemoteControl>(out rcControls);
+
+        //    foreach (IMyTerminalControl c in rcControls)
+        //    {
+        //        // a quick way to dump all IDs to SE's log
+        //        string name = MyTexts.GetString((c as IMyTerminalControlTitleTooltip)?.Title.String ?? "N/A");
+        //        string valueType = (c as ITerminalProperty)?.TypeName ?? "N/A";
+        //        MyLog.Default.WriteLine($"[DEV] terminal property: id='{c.Id}'; type='{c.GetType().Name}'; valueType='{valueType}'; displayName='{name}'");
+        //    }
+        //    List<IMyTerminalAction> rcActions;
+        //    MyAPIGateway.TerminalControls.GetActions<IMyRemoteControl>(out rcActions);
+        //    foreach (IMyTerminalAction a in rcActions)
+        //    {
+        //        MyLog.Default.WriteLine($"[DEV] toolbar action: id='{a.Id}'; displayName='{a.Name}'");
+        //    }
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //    MyLog.Default.WriteLine($"");
+        //}
 
         public override void UpdateBeforeSimulation()
         {
@@ -68,30 +171,30 @@ namespace ImprovedAI
             {
                 if (!isInitialized)
                 {
-                    if (MyAPIGateway.Session == null) return;
-                    Init();
-                }
-                else
-                {
-
-                    var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
-                    if (currentFrame - _lastUpdateFrame < _updateInterval)
+                    if (MyAPIGateway.Session == null)
                         return;
-
-                    _lastUpdateFrame = currentFrame;
-
-                    // Periodic cleanup and maintenance
-                    CleanupInvalidBlocks();
-
-                    // Optional: Log active AI block counts
-                    if (updateCounter % (UPDATE_INTERVAL * 10) == 0) // Every 10 seconds
-                    {
-                        Log.Verbose("Active AI Drone Schedulers: {0}", AIDroneSchedulers.Count);
-                        Log.Verbose("Active AI Drone Controllers: {0}", AIDroneControllers.Count);
-                        Log.Verbose("Active AI Logistics Computers: {0}", AILogisticsComputers.Count);
-                    }
+                    Log.Info("Initializing IAI Session");
+                    Init();
+                    return;
                 }
 
+                var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
+                if (currentFrame - _lastUpdateFrame < _updateInterval)
+                    return;
+
+                _lastUpdateFrame = currentFrame;
+
+                // Periodic cleanup and maintenance
+                CleanupInvalidBlocks();
+
+                // Optional: Log active AI block counts
+                updateCounter++;
+                if (updateCounter % (UPDATE_INTERVAL * 10) == 0) // Every 10 seconds
+                {
+                    Log.Verbose("Active AI Drone Schedulers: {0}", AIDroneSchedulers.Count);
+                    Log.Verbose("Active AI Drone Controllers: {0}", AIDroneControllers.Count);
+                    Log.Verbose("Active AI Logistics Computers: {0}", AILogisticsComputers.Count);
+                }
             }
             catch (Exception ex)
             {
@@ -206,15 +309,21 @@ namespace ImprovedAI
                 AILogisticsComputers.Clear();
 
                 // Reset message queue singleton
-                MessageQueue.Reset();
-
+                if (MessageQueue != null)
+                {
+                    MessageQueue.Reset();
+                }
 
                 // Remove localization texts
                 MyAPIGateway.Gui.GuiControlRemoved -= GuiControlRemoved;
 
                 Instance = null;
-                Log.Info("Mod unloaded");
-                Log.Close();
+
+                if (Log.IsInitialized)
+                {
+                    Log.Info("Mod unloaded");
+                    Log.Close();
+                }
             }
             catch (Exception ex)
             {
@@ -232,13 +341,17 @@ namespace ImprovedAI
 
         void LoadLangOverrides()
         {
-            string folder = Path.Combine(ModContext.ModPathData, "Localization");
-
-            // this method loads all MyCommonTexts/MyCoreTexts/MyTexts prefixed files from the given folder.
-            // if culture is not null it would also load the same prefixed files with `Prefix.Culture.resx`
-            // if culture and subculture are not null, aside from loading the culture one it also loads `Prefix.Culture-Subculture.resx`.
-            MyTexts.LoadTexts(folder, cultureName: "override", subcultureName: null);
+            try
+            {
+                string folder = Path.Combine(ModContext.ModPathData, "Localization");
+                MyTexts.LoadTexts(folder, cultureName: "override", subcultureName: null);
+            }
+            catch
+            {
+                // ModContext might not be ready yet, will try again in Init
+            }
         }
+
         void GuiControlRemoved(object screen)
         {
             if (screen == null)

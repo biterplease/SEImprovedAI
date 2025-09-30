@@ -93,17 +93,13 @@ namespace ImprovedAI
             this.cachedInventory = new Inventory();
         }
 
-        public void Init(MyGameLogicComponent _base, MyObjectBuilder_EntityBase objectBuilder)
+        public void Init()
         {
             Log.Info("Initializing DroneController {0}", Log.BlockName(entity));
-            _base.Init(objectBuilder);
-            _base.NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
         }
 
-        public void UpdateBeforeSimulation(MyGameLogicComponent _base)
+        public void UpdateBeforeSimulation()
         {
-            _base.UpdateBeforeSimulation();
-
             if (!_initialized)
             {
                 Initialize();
@@ -116,10 +112,8 @@ namespace ImprovedAI
             // Main update logic handled in UpdateBeforeSimulation10
         }
 
-        public void UpdateBeforeSimulation10(MyGameLogicComponent _base)
+        public void UpdateBeforeSimulation10()
         {
-            _base.UpdateBeforeSimulation10();
-
             if (!_initialized)
                 return;
 

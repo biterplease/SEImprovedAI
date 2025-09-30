@@ -136,31 +136,8 @@ namespace ImprovedAI
         }
 
 
-        public void Init(MyGameLogicComponent _base, MyObjectBuilder_EntityBase objectBuilder)
+        public void UpdateBeforeSimulation10()
         {
-            Log.Info("Initializing {0}", Log.BlockName(Entity));
-            // This method is called async! Use UpdateOnceBeforeFrame for proper initialization
-            _base.Init(objectBuilder);
-            _base.NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
-        }
-
-        public void UpdateBeforeSimulation(MyGameLogicComponent _base)
-        {
-            try
-            {
-                _base.UpdateBeforeSimulation();
-                if (!(AntennaOK() && _initialized)) return;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex);
-            }
-        }
-
-
-        public void UpdateBeforeSimulation10(MyGameLogicComponent _base)
-        {
-            _base.UpdateBeforeSimulation10();
             if (!AntennaOK() && currentState != State.Error && _initialized)
             {
                 Log.Warning("Scheduler {0} antenna check failed, transitioning to error state", entityId);

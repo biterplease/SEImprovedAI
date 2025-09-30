@@ -10,13 +10,15 @@ using VRageMath;
 
 namespace ImprovedAI.Config
 {
-    public enum LogLevel
+    [Flags]
+    public enum LogLevel : byte
     {
-        Verbose,
-        Info,
-        Debug,
-        Warning,
-        Error
+        Quiet = 0,
+        Verbose = 1 ,
+        Info = 2,
+        Debug = 4,
+        Warning = 8,
+        Error = 16
     }
 
     /// <summary>
@@ -208,7 +210,7 @@ namespace ImprovedAI.Config
 
         public class LoggingConfig
         {
-            public LogLevel LogLevel { get; internal set; } = LogLevel.Info;
+            public LogLevel LogLevel { get; internal set; } = LogLevel.Info|LogLevel.Warning|LogLevel.Error;
             public bool LogPathfinding { get; internal set; } = false;
             public bool LogDroneNetwork { get; internal set; } = true;
             public bool LogDroneOrders { get; internal set; } = true;
@@ -376,15 +378,26 @@ namespace ImprovedAI.Config
             LogisticsComputer.MaxPushFrequencyTicks = Math.Max(LogisticsComputer.MinPushFrequencyTicks, ini.Get("LogisticsComputer", "MaxPushFrequencyTicks").ToInt32(LogisticsComputer.MaxPushFrequencyTicks));
 
             // Parse Logging section
-            var logLevelStr = ini.Get("Logging", "LogLevel").ToString("Info");
-            LogLevel logLevel;
-            if (Enum.TryParse<LogLevel>(logLevelStr, true, out logLevel))
-            {
-                Logging.LogLevel = logLevel;
-            }
+            Logging.LogLevel = ParseLogLevel(ini.Get("Logging", "LogLevel").ToString("Info|Warning|Error"));
             Logging.LogPathfinding = ini.Get("Logging", "LogPathfinding").ToBoolean(Logging.LogPathfinding);
             Logging.LogDroneNetwork = ini.Get("Logging", "LogDroneNetwork").ToBoolean(Logging.LogDroneNetwork);
             Logging.LogDroneOrders = ini.Get("Logging", "LogDroneOrders").ToBoolean(Logging.LogDroneOrders);
+        }
+
+        public LogLevel ParseLogLevel(string logLevelStr)
+        {
+            LogLevel level = 0;
+            if (logLevelStr.ToLower().Contains("quiet"))
+                return LogLevel.Quiet;
+            if (logLevelStr.ToLower().Contains("verbose"))
+                level |= LogLevel.Verbose;
+            if (logLevelStr.ToLower().Contains("info"))
+                level |= LogLevel.Info;
+            if (logLevelStr.ToLower().Contains("warning"))
+                level |= LogLevel.Warning;
+            if (logLevelStr.ToLower().Contains("error"))
+                level |= LogLevel.Error;
+            return level;
         }
 
         public bool CanPlayerCreateDroneController(long playerId)

@@ -1,9 +1,12 @@
 ﻿using ImprovedAI.Utils.Logging;
 using Sandbox.Common.ObjectBuilders;
+using Sandbox.Game.Entities;
 using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
+using SpaceEngineers.Game.ModAPI;
 using System;
 using VRage.Game.Components;
+using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 
@@ -19,13 +22,15 @@ namespace ImprovedAI
     {
         // The actual scheduler instance
         private IAIScheduler scheduler;
+        private IMyBroadcastController broadcastController;
+        private IMyCubeBlock block;
 
         // Configuration
         private OperationMode operationMode = OperationMode.Orchestrator;
         private WorkModes workModes = WorkModes.WeldUnfinishedBlocks | WorkModes.RepairDamagedBlocks;
 
         // State tracking
-        private bool isInitialized = false;
+        private bool _initialized = false;
         private int initializationTicks = 0;
         private const int INITIALIZATION_DELAY = 60; // Wait 1 second for grid to stabilize
 
@@ -42,15 +47,12 @@ namespace ImprovedAI
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
+            base.Init(objectBuilder);
             try
             {
-                // Create the scheduler instance with this entity
-                scheduler = new IAIScheduler(Entity, operationMode, workModes);
-
-                // Set update flags - we need both frequent and infrequent updates
-                NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_100TH_FRAME;
-
-                Log.Info("Scheduler block initializing: {0}", Entity.DisplayName);
+                block = (IMyCubeBlock)Entity;
+                NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+                Log.Verbose("Scheduler block initializing: {0}", Entity.DisplayName);
             }
             catch (Exception ex)
             {
@@ -60,74 +62,43 @@ namespace ImprovedAI
 
         public override void UpdateOnceBeforeFrame()
         {
-            try
-            {
-                if (!MyAPIGateway.Session.IsServer)
-                    return;
+            base.UpdateOnceBeforeFrame();
+            IAISchedulerTerminalControls.DoOnce(ModContext);
+            broadcastController = (IMyBroadcastController)Entity;
+            scheduler = new IAIScheduler(Entity, operationMode);
 
-                // Initialize scheduler's base components
-                if (scheduler != null)
-                {
-                    scheduler.Init(this, Entity.GetObjectBuilder());
-                }
-            }
-            catch (Exception ex)
+            if (broadcastController.CubeGrid?.Physics == null)
+                return; // ignore ghost/projected grids
+
+            if (MyAPIGateway.Multiplayer.IsServer)
             {
-                Log.Error("UpdateOnceBeforeFrame", ex);
             }
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
         }
 
-        public override void UpdateBeforeSimulation()
+        public void UpdateBeforeSimulation10(MyGameLogicComponent objectBuilder)
         {
-            try
+            base.UpdateBeforeSimulation10();
+            if (!_initialized)
             {
-                if (!isInitialized)
-                {
-                    initializationTicks++;
-                    if (initializationTicks >= INITIALIZATION_DELAY)
-                    {
-                        InitializeScheduler();
-                    }
-                    return;
-                }
+                InitializeScheduler();
+                return;
+            }
 
-                if (scheduler != null && MyAPIGateway.Session.IsServer)
-                {
-                    scheduler.UpdateBeforeSimulation(this);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error("UpdateBeforeSimulation", ex);
-            }
-        }
-
-        public override void UpdateBeforeSimulation10()
-        {
-            try
-            {
-                if (!isInitialized)
-                    return;
-
-                scheduler.UpdateBeforeSimulation10(this);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("UpdateBeforeSimulation10", ex);
-            }
+            scheduler.UpdateBeforeSimulation10();
         }
         private void InitializeScheduler()
         {
             try
             {
-                if (isInitialized)
+                if (_initialized)
                     return;
 
                 // Load configuration from block storage if available
                 LoadConfiguration();
 
                 // Mark as initialized
-                isInitialized = true;
+                _initialized = true;
 
                 MyAPIGateway.Utilities.ShowMessage("BetterAI_Scheduler",
                     $"Scheduler initialized: {Entity.DisplayName}");
@@ -144,7 +115,7 @@ namespace ImprovedAI
             {
                 if (Entity.Storage != null)
                 {
-                    var storage = Entity.Storage.GetValue(Guid.Parse("12345678-1234-1234-1234-123456789012"));
+                    var storage = Entity.Storage.GetValue(IAISession.ModGuid);
                     if (!string.IsNullOrEmpty(storage))
                     {
                         // Parse configuration from storage

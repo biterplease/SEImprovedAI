@@ -1,9 +1,13 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Utils;
+using ImprovedAI.Utils.Logging;
 using Sandbox.Common.ObjectBuilders.Definitions;
 using Sandbox.ModAPI;
+using System;
 using VRage.Game.Components;
-
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
+using VRage.ObjectBuilders;
 using static ImprovedAI.LogisticsComputer;
 
 namespace ImprovedAI
@@ -11,10 +15,68 @@ namespace ImprovedAI
     [MyEntityComponentDescriptor(typeof(MyObjectBuilder_ProgrammableBlockDefinition), false, "ImprovedAILargeLogisticsComputer")]
     public class IAILogisticsComputerBlock : MyGameLogicComponent
     {
+        IMyCubeBlock block;
         IMyProgrammableBlock programmableBlock;
+        IAILogisticsComputer logisticsComputer;
+        private bool _initialized = false;
         public IAILogisticsComputerSettings settings { get; set; }
 
         public static ServerConfig.LogisticsComputerConfig BlockConfig = ServerConfig.Instance.LogisticsComputer;
+
+
+        public override void Init(MyObjectBuilder_EntityBase objectBuilder)
+        {
+            base.Init(objectBuilder);
+            block = (IMyCubeBlock)Entity;
+            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+        }
+        public override void UpdateOnceBeforeFrame()
+        {
+            base.UpdateOnceBeforeFrame();
+            IAILogisticsComputerTerminalControls.DoOnce(ModContext);
+            block = (IMyCubeBlock)Entity;
+            programmableBlock = (IMyProgrammableBlock)Entity;
+
+            if (programmableBlock.CubeGrid?.Physics == null)
+                return; // ignore ghost/projected grids
+
+            // the bonus part, enforcing it to stay a specific value.
+            if (MyAPIGateway.Multiplayer.IsServer) // serverside only to avoid network spam
+            {
+            }
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
+        }
+
+        public override void UpdateAfterSimulation()
+        {
+            base.UpdateAfterSimulation();
+        }
+
+        public override void UpdateAfterSimulation10()
+        {
+            base.UpdateAfterSimulation10();
+            if (!_initialized)
+            {
+                Initialize();
+                return;
+            }
+            logisticsComputer.Update();
+        }
+
+        private void Initialize()
+        {
+            try
+            {
+                logisticsComputer = new IAILogisticsComputer(Entity, IAISession.Instance.MessageQueue);
+                logisticsComputer.Initialize();
+                _initialized = true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("LogisticsComputerBlock {0} Initialize error: {1}", Entity.EntityId, ex.Message);
+            }
+        }
+
         public bool Terminal_IsEnabled
         {
             get

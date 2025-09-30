@@ -1,8 +1,8 @@
 @echo off
-rmdir /S /Q "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAIConstructor" 2>NUL
-mkdir "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAIConstructor" 2>NUL
-mkdir "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAIConstructor\Data" 2>NUL
+rmdir /S /Q "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI" 2>NUL
+mkdir "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI" 2>NUL
+mkdir "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI\Data" 2>NUL
 
-xcopy "C:\Users\dangu\source\repos\BetterAIConstructor\BetterAIConstructor\modinfo.sbm" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAIConstructor\" /Y /Q 2>NUL
-REM xcopy "C:\Users\dangu\source\repos\BetterAI_Constructor\BetterAI_Constructor\*.sbc" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAI_Constructor\" /S /Y /Q 2>NUL
-xcopy "C:\Users\dangu\source\repos\BetterAIConstructor\BetterAIConstructor\Data" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\BetterAIConstructor\Data\" /S /Y /Q 2>NUL
+xcopy "C:\Users\dangu\source\repos\ImprovedAI\ImprovedAI\modinfo.sbm" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI\" /Y /Q 2>NUL
+xcopy "C:\Users\dangu\source\repos\ImprovedAI\ImprovedAI\ImprovedAI.ini" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI\" /Y /Q 2>NUL
+xcopy "C:\Users\dangu\source\repos\ImprovedAI\ImprovedAI\Data" "C:\Users\dangu\AppData\Roaming\SpaceEngineers\Mods\ImprovedAI\Data\" /S /Y /Q 2>NUL

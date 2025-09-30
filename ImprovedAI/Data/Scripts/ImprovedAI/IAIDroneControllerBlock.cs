@@ -1,9 +1,11 @@
 ﻿using ImprovedAI.Utils.Logging;
 using Sandbox.Common.ObjectBuilders;
+using Sandbox.Game.Entities.Blocks;
 using Sandbox.Game.EntityComponents;
 using Sandbox.ModAPI;
 using System;
 using VRage.Game.Components;
+using VRage.Game.ModAPI;
 using VRage.ModAPI;
 using VRage.ObjectBuilders;
 
@@ -19,6 +21,8 @@ namespace ImprovedAI
     {
         // The actual drone controller instance
         private IAIDroneController droneController;
+        private IMyRemoteControl remoteControl;
+        private IMyCubeBlock block;
 
         // Configuration
         private Drone.OperationMode operationMode = Drone.OperationMode.StandAlone;
@@ -26,7 +30,7 @@ namespace ImprovedAI
         // State tracking
         private bool isInitialized = false;
         private int initializationTicks = 0;
-        private const int INITIALIZATION_DELAY = 60; // Wait 1 second for grid to stabilize
+        private const int INITIALIZATION_DELAY = 10; // Wait 10 ticks for grid to stabilize
 
         /// <summary>
         /// Provides access to the internal drone controller for terminal controls and debugging
@@ -40,43 +44,31 @@ namespace ImprovedAI
 
         public override void Init(MyObjectBuilder_EntityBase objectBuilder)
         {
-            try
-            {
-                // Create the drone controller instance with this entity
-                droneController = new IAIDroneController(Entity, operationMode);
-
-                // Set update flags
-                NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
-
-                Log.Info("Drone controller block initializing: {0}", Entity.DisplayName);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Init", ex);
-            }
+            base.Init(objectBuilder);
+            droneController = new IAIDroneController(Entity, operationMode);
+            block = (IMyCubeBlock)Entity;
+            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
         }
 
         public override void UpdateOnceBeforeFrame()
         {
-            try
-            {
-                if (!MyAPIGateway.Session.IsServer)
-                    return;
+            base.UpdateOnceBeforeFrame();
+            IAIDroneControllerTerminalControls.DoOnce(ModContext);
+            remoteControl = (IMyRemoteControl)Entity;
 
-                // Initialize drone controller's base components
-                if (droneController != null)
-                {
-                    droneController.Init(this, Entity.GetObjectBuilder());
-                }
-            }
-            catch (Exception ex)
+            if (remoteControl.CubeGrid?.Physics == null)
+                return; // ignore ghost/projected grids
+
+            // the bonus part, enforcing it to stay a specific value.
+            if (MyAPIGateway.Multiplayer.IsServer) // serverside only to avoid network spam
             {
-                Log.Error("UpdateOnceBeforeFrame", ex);
             }
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME|MyEntityUpdateEnum.EACH_10TH_FRAME;
         }
 
         public override void UpdateBeforeSimulation()
         {
+            base.UpdateBeforeSimulation();
             try
             {
                 if (!isInitialized)
@@ -91,7 +83,7 @@ namespace ImprovedAI
 
                 if (droneController != null && MyAPIGateway.Session.IsServer)
                 {
-                    droneController.UpdateBeforeSimulation(this);
+                    droneController.UpdateBeforeSimulation();
                 }
             }
             catch (Exception ex)
@@ -102,12 +94,13 @@ namespace ImprovedAI
 
         public override void UpdateBeforeSimulation10()
         {
+            base.UpdateBeforeSimulation10();
             try
             {
                 if (!isInitialized)
                     return;
 
-                droneController?.UpdateBeforeSimulation10(this);
+                droneController?.UpdateBeforeSimulation10();
             }
             catch (Exception ex)
             {
@@ -131,8 +124,7 @@ namespace ImprovedAI
                 // Register with session
                 IAISession.Instance?.RegisterDroneController(this);
 
-                MyAPIGateway.Utilities.ShowMessage("ImprovedAI_Drone",
-                    $"Drone controller initialized: {Entity.DisplayName}");
+                Log.Verbose("ImprovedAI Drone controller initialized: {0}", Entity.DisplayName);
             }
             catch (Exception ex)
             {
@@ -264,7 +256,7 @@ namespace ImprovedAI
                 // Clear references
                 droneController = null;
 
-                MyAPIGateway.Utilities.ShowMessage("ImprovedAI_Drone", $"Drone controller closed: {Entity?.DisplayName}");
+                Log.Verbose("ImprovedAIDroneController Drone controller closed: {0}", Entity?.DisplayName);
             }
             catch (Exception ex)
             {
