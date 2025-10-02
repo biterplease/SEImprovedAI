@@ -128,6 +128,11 @@ namespace ImprovedAI.Config
             /// </summary>
             public bool RequireCamerasForPathfinding { get; internal set; } = true;
             /// <summary>
+            /// Max distance the camera raycast can go. It is adjusted for the length of the trip; the
+            /// max value will only be used in long trips.
+            /// </summary>
+            public float MaxSimulatedCameraRaycastMeters { get; internal set; } = 1000.0f;
+            /// <summary>
             /// This adds a small cost to pathfinding in planets, usually for longer trips. If enabled,
             /// a drone will travel an arc around the planet's center, to its target.
             /// If disabled, a drone may crash into the planet, by drawing a straight line to the target.
