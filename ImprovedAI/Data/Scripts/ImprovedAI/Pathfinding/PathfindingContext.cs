@@ -10,11 +10,12 @@ namespace ImprovedAI.Pathfinding
     public class PathfindingContext
     {
         public IMyShipController Controller { get; set; }
+        public Base6Directions.Direction ControllerFlightDirection { get; set; }
         public List<IMySensorBlock> Sensors { get; set; }
+        public List<IMyCameraBlock> Cameras { get; set; }
         public Vector3D GravityVector { get; set; }
-        public double MaxThrust { get; set; }
-        public double MaxLoad { get; set; }
-        public double WaypointDistance { get; set; }
+        public float MaxLoad { get; set; }
+        public float WaypointDistance { get; set; }
         public IMyCubeGrid CubeGrid { get; set; }
 
         // Enhanced thrust and mass properties
