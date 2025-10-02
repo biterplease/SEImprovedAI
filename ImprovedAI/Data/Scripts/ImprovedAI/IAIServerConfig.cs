@@ -64,7 +64,7 @@ namespace ImprovedAI.Config
         public SchedulerBlockConfig SchedulerBounds { get; private set; }
         public LogisticsComputerConfig LogisticsComputer { get; private set; }
 
-        private ServerConfig()
+        public ServerConfig()
         {
             // Initialize all nested config objects
             Session = new SessionConfig();
