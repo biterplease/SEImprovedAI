@@ -114,19 +114,62 @@ namespace ImprovedAI.Config
 
         public class PathfindingConfig
         {
+            /// <summary>
+            /// Sensors are simulated by making the drone aware of its surroundings within 50m of the sensor.
+            /// If this is true, and the ship has no sensor, it will not be able to detect obstacles.
+            /// Disable if your server does not allow sensors (simulation still takes place).
+            /// </summary>
+            public bool RequireSensorForPathinding { get; internal set; } = true;
+            /// <summary>
+            /// Camera raycasting is simulated, with a range of 200m. Each drone requires 6 cameras
+            /// (one in each direction) to be able to raycast. Note that the camera raycast is never invoked,
+            /// a more efficient method is used.
+            /// Disable if you don't want cameras on drones.
+            /// </summary>
+            public bool RequireCamerasForPathfinding { get; internal set; } = true;
+            /// <summary>
+            /// This adds a small cost to pathfinding in planets, usually for longer trips. If enabled,
+            /// a drone will travel an arc around the planet's center, to its target.
+            /// If disabled, a drone may crash into the planet, by drawing a straight line to the target.
+            /// </summary>
+            public bool UsePlanetAwarePathfinding { get; internal set; } = true;
+            /// <summary>
+            /// This gives different behaviors to the different pathfinding methods.
+            ///
+            /// For Direct Pathfinding (default method), drones that encounter obstacles will move one or 
+            /// more steps, until it either a) the obstacle is no longer in the direct line to the target,
+            /// or b) MaxRepositionAttemtps is reached, at this point the drone will go into an error state.
+            /// 
+            /// For AStar Pathfinding, the drone will try to reroute to the target, may even retrace its steps
+            /// to a known location, and attempt a different path.
+            /// 
+            /// If disabled, drones will simply go into error states and hover.
+            /// </summary>
+            public bool AllowRepathing { get; internal set; } = true;
+            /// <summary>
+            /// Basic direct pathfinding method. Its literally a direct line to target with no obstacle
+            /// avoidance. Disabling this will render the drones unusable.
+            /// </summary>
             public bool AllowDirectPathfinding { get; internal set; } = true;
-            public bool AllowSensors { get; internal set; } = true;
-            public bool AllowObstacleAvoidance { get; internal set; } = true;
-            public bool AllowSimpleRepositioning { get; internal set; } = true;
+            // A* is an advanced pathfinding method.
             public bool AllowAStar { get; internal set; } = false;
             public bool AllowDStarLite { get; internal set; } = false;
-            public bool UseGravityAwarePathing { get; internal set; } = true;
-            public double MinWaypointDistance { get; internal set; } = 5.0;
-            public double MaxWaypointDistance { get; internal set; } = 15.0;
+            /// <summary>
+            /// Minimum distance between waypoint, in meters. If target is closer than this, a one-step move at ApproachSpeed
+            /// is performed.
+            /// </summary>
+            public float MinWaypointDistance { get; internal set; } = 12.5f;
+            /// <summary>
+            /// Maximum distance between waypoints, in meters.
+            /// </summary>
+            public float MaxWaypointDistance { get; internal set; } = 500.0f;
             public int MaxRepositionAttempts { get; internal set; } = 10;
-            public double RepositionStep { get; internal set; } = 10.0;
-            public double MinAltitudeBuffer { get; internal set; } = 20.0;
-            public int MaxPathNodes { get; internal set; } = 1000;
+            public float MinAltitudeBuffer { get; internal set; } = 20.0f;
+
+            /// <summary>
+            /// Max number of waypoints created when pathfinding.
+            /// </summary>
+            public int MaxPathNodes { get; internal set; } = 500;
             public TimeSpan MaxPathfindingTime { get; internal set; } = TimeSpan.FromMilliseconds(50);
         }
 

@@ -63,7 +63,7 @@ namespace ImprovedAI
             if (MyAPIGateway.Multiplayer.IsServer) // serverside only to avoid network spam
             {
             }
-            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME|MyEntityUpdateEnum.EACH_10TH_FRAME;
+            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
         }
 
         public override void UpdateBeforeSimulation()
@@ -88,7 +88,7 @@ namespace ImprovedAI
             }
             catch (Exception ex)
             {
-                Log.Error("UpdateBeforeSimulation", ex);
+                Log.Error("IAIDroneController block {0}: UpdateBeforeSimulation error: {1}", Entity.EntityId, ex);
             }
         }
 
@@ -101,10 +101,23 @@ namespace ImprovedAI
                     return;
 
                 droneController?.UpdateBeforeSimulation10();
+                SaveConfiguration();
             }
             catch (Exception ex)
             {
-                Log.Error("UpdateBeforeSimulation10", ex);
+                Log.Error("IAIDroneController block {0}: UpdateBeforeSimulation10 error: {1}", Entity.EntityId, ex);
+            }
+        }
+        public override void UpdateBeforeSimulation100()
+        {
+            base.UpdateBeforeSimulation100();
+            try
+            {
+                SaveConfiguration();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("IAIDroneController block {0}: UpdateBeforeSimulation100 error: {1}", Entity.EntityId, ex);
             }
         }
 
@@ -128,7 +141,7 @@ namespace ImprovedAI
             }
             catch (Exception ex)
             {
-                Log.Error("InitializeDroneController", ex);
+                Log.Error("IAIDroneController block {0}: InitializeDroneController error: {1}", Entity.EntityId, ex);
             }
         }
 
@@ -147,7 +160,7 @@ namespace ImprovedAI
             }
             catch (Exception ex)
             {
-                Log.Error("LoadConfiguration", ex);
+                Log.Error("IAIDroneController block {0}: LoadConfiguration error: {1}", Entity.EntityId, ex);
                 // Use default configuration on error
             }
         }
@@ -162,11 +175,11 @@ namespace ImprovedAI
                 }
 
                 var configString = SerializeConfiguration();
-                Entity.Storage.SetValue(Guid.Parse("89afa424-d317-41de-992c-be2854c2f158"), configString);
+                Entity.Storage.SetValue(IAISession.ModGuid, configString);
             }
             catch (Exception ex)
             {
-                Log.Error("SaveConfiguration", ex);
+                Log.Error("IAIDroneController block {0}: SaveConfiguration error: {1}", Entity.EntityId, ex);
             }
         }
 
