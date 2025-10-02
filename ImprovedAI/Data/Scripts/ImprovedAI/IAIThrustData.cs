@@ -51,7 +51,7 @@ namespace ImprovedAI
         // Check if we can effectively move in a direction considering gravity
         public bool CanMoveInDirection(Vector3D localDirection, Vector3D localGravity, float shipMass)
         {
-            var requiredThrust = GetThrustInDirection(localDirection);
+            var availableThrust = GetThrustInDirection(localDirection);
 
             // If there's gravity, we need extra thrust to overcome it
             if (localGravity.LengthSquared() > 0.1)
@@ -60,14 +60,15 @@ namespace ImprovedAI
                 var gravityDirection = Vector3D.Normalize(localGravity);
 
                 // If moving against gravity, add gravity compensation
-                var dot = Vector3D.Dot(localDirection, -gravityDirection);
+                var dot = Vector3D.Dot(Vector3D.Normalize(localDirection), -gravityDirection);
                 if (dot > 0) // Moving against gravity
                 {
-                    requiredThrust += gravityForce * (float)dot;
+                    var requiredThrust = gravityForce * (float)dot;
+                    return availableThrust > requiredThrust; // Need enough thrust to overcome gravity
                 }
             }
 
-            return requiredThrust > 0; // We have some thrust in this direction
+            return availableThrust > 0; // We have some thrust in this direction
         }
     }
 }

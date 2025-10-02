@@ -119,7 +119,7 @@ namespace ImprovedAI.Config
             /// If this is true, and the ship has no sensor, it will not be able to detect obstacles.
             /// Disable if your server does not allow sensors (simulation still takes place).
             /// </summary>
-            public bool RequireSensorForPathinding { get; internal set; } = true;
+            public bool RequireSensorsForPathinding { get; internal set; } = true;
             /// <summary>
             /// Camera raycasting is simulated, with a range of 200m. Each drone requires 6 cameras
             /// (one in each direction) to be able to raycast. Note that the camera raycast is never invoked,
