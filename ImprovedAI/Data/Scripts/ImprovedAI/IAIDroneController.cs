@@ -673,7 +673,13 @@ namespace ImprovedAI
             currentTaskId = 0;
             currentState = Drone.State.Standby;
         }
-
+            //TODO: About Mass Changes:
+            //Events should also trigger rebuild of PathfindingContext:
+            //Thrusters added/removed/damaged
+            //Cameras added/removed/orientation changed
+            //Sensors added/removed
+            //Controller orientation setting changed
+            //Entering/leaving gravity field
         private void MoveToPosition(Vector3D targetPos)
         {
             // Simple movement logic - would be replaced with proper pathfinding
