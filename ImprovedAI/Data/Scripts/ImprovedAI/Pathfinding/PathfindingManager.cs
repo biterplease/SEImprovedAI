@@ -475,16 +475,6 @@ namespace ImprovedAI.Pathfinding
             return nearbyNodes;
         }
 
-        /// <summary>
-        /// Clear the traveled graph cache
-        /// </summary>
-        public void ClearTraveledGraph()
-        {
-            // The AdjacencyList doesn't have a Clear() method in your implementation
-            // You may want to add one, or just create a new instance
-            Log.Info("PathfindingManager: Cleared traveled graph cache");
-        }
-
         private void LogPathfindingResult(PathfindingManager.Method method, TimeSpan elapsed, Vector3D waypoint)
         {
             Log.LogPathfinding("Used {0}: {1:F1}ms, waypoint at {2}",
@@ -507,6 +497,29 @@ namespace ImprovedAI.Pathfinding
             public List<Vector3D> RemainingPath { get; set; }
             public int RepathAttempts { get; set; }
             public PathfindingManager.Method LastMethod { get; set; }
+        }
+        /// <summary>
+        /// Clear the traveled graph cache
+        /// </summary>
+        public void ClearTraveledGraph()
+        {
+            traveledGraph.Clear();
+            Log.Info("PathfindingManager: Cleared traveled graph cache");
+        }
+
+        /// <summary>
+        /// Clear old nodes from the traveled graph (older than specified age)
+        /// </summary>
+        public void PruneOldTraveledNodes(TimeSpan maxAge)
+        {
+            // This would require adding timestamps to the AdjacencyList
+            // For now, just clear everything if it gets too big
+            var nodeCount = traveledGraph.GetAllNodes().Count();
+            if (nodeCount > 1000) // Arbitrary threshold
+            {
+                Log.Warning("PathfindingManager: Traveled graph has {0} nodes, clearing to prevent bloat", nodeCount);
+                ClearTraveledGraph();
+            }
         }
     }
 }
