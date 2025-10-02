@@ -1,22 +1,35 @@
-﻿using ImprovedAI.Config;
-using Sandbox.ModAPI;
+﻿using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using VRageMath;
 
+using ImprovedAI.Config;
+using ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding;
+
 namespace ImprovedAI.Pathfinding
 {
     public class PathfindingManager
     {
-        private readonly List<IPathfinder> pathfinders = new List<IPathfinder>
+        public enum Method
         {
-            new DirectPathfinder(),
-            new ObstacleAvoidancePathfinder(),
-            new SimpleRepositioningPathfinder(),
-            // A* and D* Lite would be added here when implemented
-        };
+            None = 0,
+            DirectPathfinding = 1,           // Cheapest - straight line
+            AStar = 2,               // A* pathfinding
+            DStarLite = 4           // Most expensive - D* Lite
+        }
+
+        private ServerConfig.PathfindingConfig PathfindingConfig;
+        private readonly List<IPathfinder> pathfinders;
+
+        public PathfindingManager()
+        {
+            pathfinders = new List<IPathfinder> { new DirectPathfinder() };
+            //if (PathfindingConfig.AllowAStar)
+            //    pathfinders.Add(new AStarPathfinder());
+        }
+
 
         public List<Vector3D> CalculatePath(Vector3D start, Vector3D end, PathfindingContext context)
         {

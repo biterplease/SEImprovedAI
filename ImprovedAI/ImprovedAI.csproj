@@ -17,6 +17,9 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Mal.Mdk2.References" Version="2.2.4" />
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="MSTest.TestAdapter" Version="3.11.0" />
+    <PackageReference Include="MSTest.TestFramework" Version="3.11.0" />
   </ItemGroup>
   <ItemGroup>
     <AdditionalFiles Include="Content\*\**\*">

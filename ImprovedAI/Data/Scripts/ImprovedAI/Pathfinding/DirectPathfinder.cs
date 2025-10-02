@@ -7,7 +7,7 @@ namespace ImprovedAI.Pathfinding
 {
     public class DirectPathfinder : IPathfinder
     {
-        public PathfindingMethod Method => PathfindingMethod.Direct;
+        public PathfindingManager.Method Method => PathfindingManager.Method.DirectPathfinding;
 
         public List<Vector3D> CalculatePath(Vector3D start, Vector3D end, PathfindingContext context)
         {
