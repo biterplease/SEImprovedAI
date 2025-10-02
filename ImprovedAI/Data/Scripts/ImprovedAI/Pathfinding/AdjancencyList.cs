@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using VRageMath;
 
-namespace ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding
+namespace ImprovedAI.Pathfinding
 {
     public struct Edge
     {
@@ -17,13 +17,21 @@ namespace ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding
             Weight = weight;
         }
     }
-    public class AdjancencyList
+    public class AdjacencyList
     {
         private Dictionary<Vector3I, List<Edge>> adjacencyList;
 
-        public AdjancencyList()
+        public AdjacencyList()
         {
             adjacencyList = new Dictionary<Vector3I, List<Edge>>();
+        }
+
+        /// <summary>
+        /// Clear cached nodes.
+        /// </summary>
+        public void Clear()
+        {
+            adjacencyList.Clear();
         }
 
         /// <summary>
@@ -90,7 +98,7 @@ namespace ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding
             foreach (var edge in adjacencyList[from])
             {
                 if (edge.Target.Equals(to))
-                    return edge.Cost;
+                    return edge.Weight;
             }
 
             return float.PositiveInfinity;

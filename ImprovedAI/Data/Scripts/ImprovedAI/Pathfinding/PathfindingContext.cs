@@ -3,6 +3,7 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
+using System.Runtime.Remoting.Messaging;
 using VRage.Game.ModAPI;
 using VRageMath;
 
@@ -35,6 +36,8 @@ namespace ImprovedAI.Pathfinding
 
         public Vector3D? PlanetCenter { get; set; }
         public double PlanetRadius { get; set; }
+        public bool isInPlanetGravity { get; set; }
+
 
         public PathfindingContext(
             IMyShipController controller,
@@ -233,7 +236,7 @@ namespace ImprovedAI.Pathfinding
         {
             return ThrustData.GetMaxThrust() > 0;
         }
-
+        public bool IsInPlanetGravity() { return isInPlanetGravity; }
         public bool CanRaycastInDirection(Vector3D worldDirection)
         {
             if (!PathfindingConfig.RequireCamerasForPathfinding) return true;
