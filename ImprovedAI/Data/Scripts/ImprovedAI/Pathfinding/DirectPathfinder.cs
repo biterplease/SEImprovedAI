@@ -16,16 +16,20 @@ namespace ImprovedAI.Pathfinding
     {
         public PathfindingManager.Method Method => PathfindingManager.Method.DirectPathfinding;
 
-        private readonly ServerConfig.PathfindingConfig config;
+        private readonly IPathfindingConfig config;
 
         public DirectPathfinder()
         {
             config = IAISession.Instance?.GetConfig()?.Pathfinding;
         }
+        public DirectPathfinder(IPathfindingConfig pathfindingConfig)
+        {
+            config = pathfindingConfig;
+        }
 
         public bool IsAvailable(PathfindingContext context)
         {
-            return config?.AllowDirectPathfinding == true;
+            return config?.AllowDirectPathfinding() == true;
         }
 
         public int EstimatedComplexity(Vector3D start, Vector3D end)
@@ -61,7 +65,7 @@ namespace ImprovedAI.Pathfinding
                 var waypoint = currentPosition + direction * waypointDistance;
 
                 // Apply gravity correction if needed
-                if (config.UsePlanetAwarePathfinding && context.IsInPlanetGravity())
+                if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity())
                 {
                     waypoint = ApplyPlanetAwareCorrection(currentPosition, waypoint, targetPosition, context);
                 }
@@ -70,7 +74,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Path is blocked, try repositioning if allowed
-            if (config.AllowRepathing)
+            if (config.AllowRepathing())
             {
                 return FindClearWaypoint(currentPosition, targetPosition, context);
             }
@@ -101,7 +105,7 @@ namespace ImprovedAI.Pathfinding
                 var basePos = Vector3D.Lerp(start, end, t);
 
                 // Apply planet-aware correction if needed
-                if (config.UsePlanetAwarePathfinding && context.IsInPlanetGravity())
+                if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity())
                 {
                     basePos = ApplyPlanetAwareCorrection(start, basePos, end, context);
                 }
@@ -125,7 +129,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check for obstacles using raycasting (if cameras available)
-            if (config.RequireCamerasForPathfinding && context.CamerasByDirection?.Count > 0)
+            if (config.RequireCamerasForPathfinding() && context.CamerasByDirection?.Count > 0)
             {
                 if (!IsPathClearViaRaycast(start, end, context))
                 {
@@ -135,7 +139,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check for obstacles using sensors (if sensors available)
-            if (config.RequireSensorsForPathinding && context.SensorInfos?.Count > 0)
+            if (config.RequireSensorsForPathfinding() && context.SensorInfos?.Count > 0)
             {
                 if (HasObstacleInSensorRange(start, end, context))
                 {
@@ -165,7 +169,7 @@ namespace ImprovedAI.Pathfinding
             // Scale raycast distance based on trip length (shorter trips = shorter raycasts)
             var maxRaycastDistance = Math.Min(
                 distance,
-                Math.Min(config.MaxSimulatedCameraRaycastMeters, distance * 0.5)
+                Math.Min(config.MaxSimulatedCameraRaycastMeters(), distance * 0.5)
             );
 
             // Perform raycast
@@ -316,7 +320,7 @@ namespace ImprovedAI.Pathfinding
             var desiredRadius = MathHelper.Lerp(startRadius, targetRadius, (float)progress);
 
             // Add altitude buffer
-            var minSafeRadius = context.PlanetRadius + config.MinAltitudeBuffer;
+            var minSafeRadius = context.PlanetRadius + config.MinAltitudeBuffer();
             desiredRadius = Math.Max(desiredRadius, minSafeRadius);
 
             // Calculate final waypoint position
@@ -336,14 +340,14 @@ namespace ImprovedAI.Pathfinding
             var planetCenter = context.PlanetCenter.Value;
             var waypointVector = waypoint - planetCenter;
             var currentRadius = waypointVector.Length();
-            var minSafeRadius = context.PlanetRadius + config.MinAltitudeBuffer;
+            var minSafeRadius = context.PlanetRadius + config.MinAltitudeBuffer();
 
             if (currentRadius < minSafeRadius)
             {
                 // Lift waypoint to safe altitude
                 var correctedWaypoint = planetCenter + Vector3D.Normalize(waypointVector) * minSafeRadius;
                 Log.Verbose("DirectPathfinder: Lifted waypoint to safe altitude ({0}m above surface)",
-                    config.MinAltitudeBuffer);
+                    config.MinAltitudeBuffer());
                 return correctedWaypoint;
             }
 
@@ -355,7 +359,7 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         private Vector3D? FindClearWaypoint(Vector3D currentPosition, Vector3D targetPosition, PathfindingContext context)
         {
-            if (!config.AllowRepathing)
+            if (!config.AllowRepathing())
             {
                 Log.Warning("DirectPathfinder: Repathing disabled, cannot find alternate waypoint");
                 return null;
@@ -365,7 +369,7 @@ namespace ImprovedAI.Pathfinding
             var perpendicular = CalculatePerpendicularDirections(directionToTarget, context);
 
             // Try repositioning in different directions
-            for (int attempt = 1; attempt <= config.MaxRepositionAttempts; attempt++)
+            for (int attempt = 1; attempt <= config.MaxRepositionAttempts(); attempt++)
             {
                 var repositionDistance = attempt * context.WaypointDistance * 0.5; // Half waypoint distance per attempt
 
@@ -375,7 +379,7 @@ namespace ImprovedAI.Pathfinding
                     var testPosition = currentPosition + perpDir * repositionDistance;
 
                     // Ensure safe altitude
-                    if (config.UsePlanetAwarePathfinding && context.IsInPlanetGravity())
+                    if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity())
                     {
                         testPosition = EnsureSafeAltitude(testPosition, context);
                     }
@@ -392,7 +396,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             Log.Warning("DirectPathfinder: Failed to find clear waypoint after {0} attempts",
-                config.MaxRepositionAttempts);
+                config.MaxRepositionAttempts());
             return null;
         }
 

@@ -75,7 +75,6 @@ namespace ImprovedAI
         // Navigation
         private Vector3D currentTargetPosition;
         private List<Vector3D> currentPath = new List<Vector3D>();
-        private int pathIndex = 0;
 
         // Update intervals (from server settings)
         private readonly int COMPONENT_CHECK_INTERVAL_TICKS = 600;
@@ -783,7 +782,6 @@ namespace ImprovedAI
             currentTask = null;
             taskQueue.Clear();
             currentPath.Clear();
-            pathIndex = 0;
 
             // Disable tools
             if (welder?.Enabled == true) welder.Enabled = false;

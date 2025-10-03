@@ -67,8 +67,8 @@ namespace ImprovedAI
         /// <summary>
         /// Timeout after which drones are removed if we don't hear from them again.
         /// </summary>
-        private static readonly int droneTimeoutSeconds = 1800;
-        private static DateTime lastCacheUpdate;
+        //private static readonly int droneTimeoutSeconds = 1800;
+        //private static DateTime lastCacheUpdate;
 
         private static readonly MessageTopics[] DroneManagementTopics = new MessageTopics[]
         {
@@ -102,11 +102,10 @@ namespace ImprovedAI
         private float ignoreTasksOutsideSpecifiedRangeMeters = 1000.0f;
         private bool ignoreTasksOutsideOfAntenaRange = true;
         private bool _initialized = false;
-        private bool ignoreWeldColorEnabled;
         private Vector3 weldIgnoreColor;
         private Vector3 grindColor;
 
-        private Dictionary<TaskType, List<Task>> pendingTasks;
+        //private Dictionary<TaskType, List<Task>> pendingTasks;
 
         private struct AntennaInfo
         {
@@ -453,12 +452,10 @@ namespace ImprovedAI
         {
             if (workModes.HasFlag(WorkModes.WeldUnfinishedBlocks) &&
                     block.BuildLevelRatio < 1.0f &&
-                    ignoreWeldColorEnabled &&
                     !ColorUtil.ColorMatch(block, weldIgnoreColor))
                 return true;
             if (workModes.HasFlag(WorkModes.RepairDamagedBlocks) &&
                     block.CurrentDamage > 0.0f &&
-                    ignoreWeldColorEnabled &&
                     !ColorUtil.ColorMatch(block, weldIgnoreColor))
                 return true;
             return false;

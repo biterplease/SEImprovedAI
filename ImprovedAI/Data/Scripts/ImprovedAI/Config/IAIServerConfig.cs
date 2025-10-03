@@ -38,6 +38,8 @@ namespace ImprovedAI.Config
         ProtoBuf
     }
 
+    
+
     public class ServerConfig
     {
         private static ServerConfig _instance;
@@ -112,71 +114,6 @@ namespace ImprovedAI.Config
             public int MaxDroneControllersPerFaction { get; internal set; } = 50;
         }
 
-        public class PathfindingConfig
-        {
-            /// <summary>
-            /// Sensors are simulated by making the drone aware of its surroundings within 50m of the sensor.
-            /// If this is true, and the ship has no sensor, it will not be able to detect obstacles.
-            /// Disable if your server does not allow sensors (simulation still takes place).
-            /// </summary>
-            public bool RequireSensorsForPathinding { get; internal set; } = true;
-            /// <summary>
-            /// Camera raycasting is simulated, with a range of 200m. Each drone requires 6 cameras
-            /// (one in each direction) to be able to raycast. Note that the camera raycast is never invoked,
-            /// a more efficient method is used.
-            /// Disable if you don't want cameras on drones.
-            /// </summary>
-            public bool RequireCamerasForPathfinding { get; internal set; } = true;
-            /// <summary>
-            /// Max distance the camera raycast can go. It is adjusted for the length of the trip; the
-            /// max value will only be used in long trips.
-            /// </summary>
-            public float MaxSimulatedCameraRaycastMeters { get; internal set; } = 1000.0f;
-            /// <summary>
-            /// This adds a small cost to pathfinding in planets, usually for longer trips. If enabled,
-            /// a drone will travel an arc around the planet's center, to its target.
-            /// If disabled, a drone may crash into the planet, by drawing a straight line to the target.
-            /// </summary>
-            public bool UsePlanetAwarePathfinding { get; internal set; } = true;
-            /// <summary>
-            /// This gives different behaviors to the different pathfinding methods.
-            ///
-            /// For Direct Pathfinding (default method), drones that encounter obstacles will move one or 
-            /// more steps, until it either a) the obstacle is no longer in the direct line to the target,
-            /// or b) MaxRepositionAttemtps is reached, at this point the drone will go into an error state.
-            /// 
-            /// For AStar Pathfinding, the drone will try to reroute to the target, may even retrace its steps
-            /// to a known location, and attempt a different path.
-            /// 
-            /// If disabled, drones will simply go into error states and hover.
-            /// </summary>
-            public bool AllowRepathing { get; internal set; } = true;
-            /// <summary>
-            /// Basic direct pathfinding method. Its literally a direct line to target with no obstacle
-            /// avoidance. Disabling this will render the drones unusable.
-            /// </summary>
-            public bool AllowDirectPathfinding { get; internal set; } = true;
-            // A* is an advanced pathfinding method.
-            public bool AllowAStar { get; internal set; } = false;
-            public bool AllowDStarLite { get; internal set; } = false;
-            /// <summary>
-            /// Minimum distance between waypoint, in meters. If target is closer than this, a one-step move at ApproachSpeed
-            /// is performed.
-            /// </summary>
-            public float MinWaypointDistance { get; internal set; } = 12.5f;
-            /// <summary>
-            /// Maximum distance between waypoints, in meters.
-            /// </summary>
-            public float MaxWaypointDistance { get; internal set; } = 500.0f;
-            public int MaxRepositionAttempts { get; internal set; } = 10;
-            public float MinAltitudeBuffer { get; internal set; } = 20.0f;
-
-            /// <summary>
-            /// Max number of waypoints created when pathfinding.
-            /// </summary>
-            public int MaxPathNodes { get; internal set; } = 200;
-            public TimeSpan MaxPathfindingTime { get; internal set; } = TimeSpan.FromMilliseconds(50);
-        }
 
         public class DroneControllerBlockConfig
         {
@@ -358,21 +295,16 @@ namespace ImprovedAI.Config
             BlockLimits.MaxDroneControllersPerFaction = Math.Max(0, ini.Get("Limits", "MaxDroneControllersPerFaction").ToInt32(BlockLimits.MaxDroneControllersPerFaction));
 
             // Parse Pathfinding section
-            Pathfinding.AllowDirectPathfinding = ini.Get("Pathfinding", "AllowDirectPathfinding").ToBoolean(Pathfinding.AllowDirectPathfinding);
-            Pathfinding.AllowSensors = ini.Get("Pathfinding", "AllowSensors").ToBoolean(Pathfinding.AllowSensors);
-            Pathfinding.AllowObstacleAvoidance = ini.Get("Pathfinding", "AllowObstacleAvoidance").ToBoolean(Pathfinding.AllowObstacleAvoidance);
-            Pathfinding.AllowSimpleRepositioning = ini.Get("Pathfinding", "AllowSimpleRepositioning").ToBoolean(Pathfinding.AllowSimpleRepositioning);
-            Pathfinding.AllowAStar = ini.Get("Pathfinding", "AllowAStar").ToBoolean(Pathfinding.AllowAStar);
-            Pathfinding.AllowDStarLite = ini.Get("Pathfinding", "AllowDStarLite").ToBoolean(Pathfinding.AllowDStarLite);
-            Pathfinding.UseGravityAwarePathing = ini.Get("Pathfinding", "UseGravityAwarePathing").ToBoolean(Pathfinding.UseGravityAwarePathing);
-            Pathfinding.MinWaypointDistance = Math.Max(1.0, ini.Get("Pathfinding", "MinWaypointDistance").ToDouble(Pathfinding.MinWaypointDistance));
-            Pathfinding.MaxWaypointDistance = Math.Max(Pathfinding.MinWaypointDistance, ini.Get("Pathfinding", "MaxWaypointDistance").ToDouble(Pathfinding.MaxWaypointDistance));
-            Pathfinding.MaxRepositionAttempts = Math.Max(1, ini.Get("Pathfinding", "MaxRepositionAttempts").ToInt32(Pathfinding.MaxRepositionAttempts));
-            Pathfinding.RepositionStep = Math.Max(1.0, ini.Get("Pathfinding", "RepositionStep").ToDouble(Pathfinding.RepositionStep));
-            Pathfinding.MinAltitudeBuffer = Math.Max(0.0, ini.Get("Pathfinding", "MinAltitudeBuffer").ToDouble(Pathfinding.MinAltitudeBuffer));
-            Pathfinding.MaxPathNodes = Math.Max(100, ini.Get("Pathfinding", "MaxPathNodes").ToInt32(Pathfinding.MaxPathNodes));
+            Pathfinding.allowDirectPathfinding = ini.Get("Pathfinding", "AllowDirectPathfinding").ToBoolean(Pathfinding.allowDirectPathfinding);
+            Pathfinding.allowAStar = ini.Get("Pathfinding", "AllowAStar").ToBoolean(Pathfinding.allowAStar);
+            //Pathfinding.allowDStarLite = ini.Get("Pathfinding", "AllowDStarLite").ToBoolean(Pathfinding.AllowDStarLite);
+            Pathfinding.usePlanetAwarePathfinding = ini.Get("Pathfinding", "UsePlanetAwarePathfinding").ToBoolean(Pathfinding.usePlanetAwarePathfinding);
+            Pathfinding.minWaypointDistance = (float)Math.Max(1.0, ini.Get("Pathfinding", "MinWaypointDistance").ToDouble(Pathfinding.minWaypointDistance));
+            Pathfinding.maxWaypointDistance = (float)Math.Max(Pathfinding.minWaypointDistance, ini.Get("Pathfinding", "MaxWaypointDistance").ToDouble(Pathfinding.maxWaypointDistance));
+            Pathfinding.maxRepositionAttempts = Math.Max(1, ini.Get("Pathfinding", "MaxRepositionAttempts").ToInt32(Pathfinding.maxRepositionAttempts));
+            Pathfinding.maxPathNodes = Math.Max(100, ini.Get("Pathfinding", "MaxPathNodes").ToInt32(Pathfinding.maxPathNodes));
             var maxPathfindingMs = Math.Max(10, ini.Get("Pathfinding", "MaxPathfindingTimeMs").ToInt32(50));
-            Pathfinding.MaxPathfindingTime = TimeSpan.FromMilliseconds(maxPathfindingMs);
+            Pathfinding.maxPathfindingTime = TimeSpan.FromMilliseconds(maxPathfindingMs);
 
             // Parse Scheduler section
             SchedulerBounds.MaxTargetLimit = Math.Max(1, ini.Get("Scheduler", "MaxTargetLimit").ToInt32(SchedulerBounds.MaxTargetLimit));
@@ -537,7 +469,6 @@ namespace ImprovedAI.Config
             summary += $"Drone Controllers - Max per Faction: {(BlockLimits.MaxDroneControllersPerFaction > 0 ? BlockLimits.MaxDroneControllersPerFaction.ToString() : "Unlimited")}\n";
             summary += $"Current Schedulers: {IAISession.Instance?.AIDroneSchedulers?.Count ?? 0}\n";
             summary += $"Current Drone Controllers: {IAISession.Instance?.AIDroneControllers?.Count ?? 0}\n";
-            summary += $"Pathfinding: {(Pathfinding.AllowAStar ? "Advanced" : Pathfinding.AllowObstacleAvoidance ? "Sensors" : "Basic")}\n";
             summary += $"Logistics: {(LogisticsComputer.AllowLogistics ? "Enabled" : "Disabled")}\n";
             return summary;
         }

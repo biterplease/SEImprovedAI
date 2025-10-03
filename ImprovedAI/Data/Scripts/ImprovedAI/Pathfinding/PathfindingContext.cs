@@ -20,7 +20,7 @@ namespace ImprovedAI.Pathfinding
         }
         public IMyShipController Controller { get; set; }
         public Base6Directions.Direction ControllerForwardDirection { get; set; }
-        public ServerConfig.PathfindingConfig PathfindingConfig;
+        public IPathfindingConfig PathfindingConfig;
         public List<IMySensorBlock> Sensors { get; set; }
         public List<SensorInfo> SensorInfos { get; set; }
         public List<IMyCameraBlock> Cameras { get; set; }
@@ -75,7 +75,7 @@ namespace ImprovedAI.Pathfinding
                 }
             }
 
-            if (PathfindingConfig.RequireSensorsForPathinding)
+            if (PathfindingConfig.RequireSensorsForPathfinding())
             {
                 // Build sensor cache
                 SensorInfos = new List<SensorInfo>();
@@ -97,7 +97,7 @@ namespace ImprovedAI.Pathfinding
                 Sensors = sensors; // Keep original list reference
             }
 
-            if (PathfindingConfig.RequireCamerasForPathfinding)
+            if (PathfindingConfig.RequireSensorsForPathfinding())
             {
                 // Build camera direction cache
                 CamerasByDirection = new Dictionary<Base6Directions.Direction, List<IMyCameraBlock>>();
@@ -180,7 +180,7 @@ namespace ImprovedAI.Pathfinding
             if (!altitude.HasValue)
                 return true; // Not near a planet, altitude doesn't matter
 
-            return altitude.Value > PathfindingConfig.MinAltitudeBuffer;
+            return altitude.Value > PathfindingConfig.MinAltitudeBuffer();
         }
         // Calculate effective thrust in world direction
         public float GetEffectiveThrustInWorldDirection(Vector3D worldDirection)
@@ -239,7 +239,7 @@ namespace ImprovedAI.Pathfinding
         public bool IsInPlanetGravity() { return isInPlanetGravity; }
         public bool CanRaycastInDirection(Vector3D worldDirection)
         {
-            if (!PathfindingConfig.RequireCamerasForPathfinding) return true;
+            if (!PathfindingConfig.RequireCamerasForPathfinding()) return true;
             if (Controller == null || CamerasByDirection == null) return false;
 
             // Convert world direction to local ship coordinates

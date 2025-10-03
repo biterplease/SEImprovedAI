@@ -16,7 +16,7 @@ namespace ImprovedAI.Pathfinding
     {
         public PathfindingManager.Method Method => PathfindingManager.Method.AStar;
 
-        private readonly ServerConfig.PathfindingConfig config;
+        private readonly IPathfindingConfig config;
         private readonly DirectPathfinder directFallback;
 
         // Pre-allocated data structures (reused across pathfinding operations)
@@ -149,16 +149,27 @@ namespace ImprovedAI.Pathfinding
                 nodePool[i] = new AStarNode();
             }
         }
+        public AStarPathfinder(IPathfindingConfig pathfindingConfig)
+        {
+            config = pathfindingConfig;
+            directFallback = new DirectPathfinder();
+
+            // Pre-allocate node pool
+            for (int i = 0; i < nodePool.Length; i++)
+            {
+                nodePool[i] = new AStarNode();
+            }
+        }
 
         public bool IsAvailable(PathfindingContext context)
         {
-            if (config?.AllowAStar != true)
+            if (config?.AllowAStar() != true)
                 return false;
 
             // A* requires either sensors or cameras for obstacle detection
-            bool hasSensors = config.RequireSensorsForPathinding &&
+            bool hasSensors = config.RequireSensorsForPathfinding() &&
                              context.SensorInfos?.Count > 0;
-            bool hasCameras = config.RequireCamerasForPathfinding &&
+            bool hasCameras = config.RequireCamerasForPathfinding() &&
                              context.CamerasByDirection?.Count > 0;
 
             return hasSensors || hasCameras;
@@ -173,14 +184,14 @@ namespace ImprovedAI.Pathfinding
 
             if (distance < 100.0) // Short distance
             {
-                gridSpacing = config.MinWaypointDistance;
+                gridSpacing = config.MinWaypointDistance();
             }
             else if (distance < 500.0) // Medium distance
             {
                 // Lerp between min and mid-range spacing
                 gridSpacing = MathHelper.Lerp(
-                    (float)config.MinWaypointDistance,
-                    (float)((config.MinWaypointDistance + config.MaxWaypointDistance) * 0.5),
+                    (float)config.MinWaypointDistance(),
+                    (float)((config.MinWaypointDistance() + config.MaxWaypointDistance()) * 0.5),
                     (float)((distance - 100.0) / 400.0)
                 );
             }
@@ -188,19 +199,19 @@ namespace ImprovedAI.Pathfinding
             {
                 // Lerp between mid-range and max spacing
                 gridSpacing = MathHelper.Lerp(
-                    (float)((config.MinWaypointDistance + config.MaxWaypointDistance) * 0.5),
-                    (float)config.MaxWaypointDistance,
+                    (float)((config.MinWaypointDistance() + config.MaxWaypointDistance()) * 0.5),
+                    (float)config.MaxWaypointDistance(),
                     (float)((distance - 500.0) / 1500.0)
                 );
             }
             else // Very long distance
             {
-                gridSpacing = config.MaxWaypointDistance;
+                gridSpacing = config.MaxWaypointDistance();
             }
 
             // Estimate nodes (multiply by 1.5 for non-straight paths)
             var estimatedNodes = (int)((distance / gridSpacing) * 1.5);
-            return Math.Min(estimatedNodes, config.MaxPathNodes);
+            return Math.Min(estimatedNodes, config.MaxPathNodes());
         }
 
         /// <summary>
@@ -232,7 +243,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // A* failed, fallback to direct pathfinding if repathing is allowed
-            if (config.AllowRepathing)
+            if (config.AllowRepathing())
             {
                 Log.Warning("AStarPathfinder: Failed to find path, falling back to direct pathfinding");
                 return directFallback.GetNextWaypoint(currentPosition, targetPosition, context);
@@ -261,7 +272,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Fallback to direct pathfinding
-            if (config.AllowRepathing)
+            if (config.AllowRepathing())
             {
                 Log.Warning("AStarPathfinder: A* failed, using direct pathfinding fallback");
                 return directFallback.CalculatePath(start, end, context);
@@ -318,16 +329,16 @@ namespace ImprovedAI.Pathfinding
             while (openQueue.Count > 0)
             {
                 // Check timeout
-                if ((DateTime.UtcNow - startTime) > config.MaxPathfindingTime)
+                if ((DateTime.UtcNow - startTime) > config.MaxPathfindingTime())
                 {
                     Log.Warning("AStarPathfinder: Timeout after exploring {0} nodes", nodesExplored);
                     return null;
                 }
 
                 // Check node limit
-                if (nodesExplored >= config.MaxPathNodes)
+                if (nodesExplored >= config.MaxPathNodes())
                 {
-                    Log.Warning("AStarPathfinder: Max nodes reached ({0})", config.MaxPathNodes);
+                    Log.Warning("AStarPathfinder: Max nodes reached ({0})", config.MaxPathNodes());
                     return null;
                 }
 
@@ -372,7 +383,7 @@ namespace ImprovedAI.Pathfinding
                     if (closedSet.ContainsKey(neighbor))
                     {
                         // Only allow revisiting if we're stuck and repathing is enabled
-                        if (!config.AllowRepathing || stuckCounter < 5)
+                        if (!config.AllowRepathing() || stuckCounter < 5)
                             continue;
 
                         closedSet.Remove(neighbor);
@@ -428,13 +439,13 @@ namespace ImprovedAI.Pathfinding
         private double CalculateOptimalGridSpacing(double distance)
         {
             if (distance < 100.0)
-                return config.MinWaypointDistance;
+                return config.MinWaypointDistance();
             else if (distance < 500.0)
-                return MathHelper.Lerp((float)config.MinWaypointDistance, (float)config.MaxWaypointDistance * 0.5f, (float)((distance - 100.0) / 400.0));
+                return MathHelper.Lerp((float)config.MinWaypointDistance(), (float)config.MaxWaypointDistance() * 0.5f, (float)((distance - 100.0) / 400.0));
             else if (distance < 2000.0)
-                return MathHelper.Lerp((float)config.MaxWaypointDistance * 0.5f, (float)config.MaxWaypointDistance, (float)((distance - 500.0) / 1500.0));
+                return MathHelper.Lerp((float)config.MaxWaypointDistance() * 0.5f, (float)    config.MaxWaypointDistance(), (float)((distance - 500.0) / 1500.0));
             else
-                return config.MaxWaypointDistance;
+                return config.MaxWaypointDistance();
         }
 
         /// <summary>
@@ -490,8 +501,8 @@ namespace ImprovedAI.Pathfinding
             // Add penalty for moving against gravity if in planet gravity
             if (context.IsInPlanetGravity() && context.PlanetCenter.HasValue)
             {
-                var fromWorld = GridToWorld(from, config.MinWaypointDistance);
-                var toWorld = GridToWorld(to, config.MinWaypointDistance);
+                var fromWorld = GridToWorld(from, config.MinWaypointDistance());
+                var toWorld = GridToWorld(to, config.MinWaypointDistance());
 
                 var fromRadius = Vector3D.Distance(fromWorld, context.PlanetCenter.Value);
                 var toRadius = Vector3D.Distance(toWorld, context.PlanetCenter.Value);
@@ -511,8 +522,8 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         private float GetMovementCost(Vector3I from, Vector3I to, PathfindingContext context, Vector3I[] directions)
         {
-            var fromWorld = GridToWorld(from, config.MinWaypointDistance);
-            var toWorld = GridToWorld(to, config.MinWaypointDistance);
+            var fromWorld = GridToWorld(from, config.MinWaypointDistance());
+            var toWorld = GridToWorld(to, config.MinWaypointDistance());
 
             var distance = Vector3D.Distance(fromWorld, toWorld);
             var movementCost = (float)distance;
@@ -579,17 +590,17 @@ namespace ImprovedAI.Pathfinding
         private bool IsTraversable(Vector3D position, PathfindingContext context)
         {
             // Check altitude if in gravity
-            if (config.UsePlanetAwarePathfinding && context.IsInPlanetGravity() && context.PlanetCenter.HasValue)
+            if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity() && context.PlanetCenter.HasValue)
             {
                 var altitude = Vector3D.Distance(position, context.PlanetCenter.Value) - context.PlanetRadius;
-                if (altitude < config.MinAltitudeBuffer)
+                if (altitude < config.MinAltitudeBuffer())
                 {
                     return false;
                 }
             }
 
             // Check for obstacles using sensors
-            if (config.RequireSensorsForPathinding && context.SensorInfos?.Count > 0)
+            if (config.RequireSensorsForPathfinding() && context.SensorInfos?.Count > 0)
             {
                 if (HasObstacleAtPosition(position, context))
                 {
@@ -611,7 +622,7 @@ namespace ImprovedAI.Pathfinding
                 if (distanceToSensor > sensorInfo.MaxRange)
                     continue;
 
-                var halfSize = new Vector3D(config.MinWaypointDistance * 0.5);
+                var halfSize = new Vector3D(config.MinWaypointDistance() * 0.5);
                 var box = new BoundingBoxD(position - halfSize, position + halfSize);
 
                 entityList.Clear();

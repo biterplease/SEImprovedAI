@@ -1,5 +1,4 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding;
 using ImprovedAI.Utils.Logging;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
@@ -27,7 +26,7 @@ namespace ImprovedAI.Pathfinding
             AStar = 2,               // A* pathfinding
             DStarLite = 4 // added later
         }
-        private readonly ServerConfig.PathfindingConfig config;
+        private readonly IPathfindingConfig config;
         private readonly IPathfinder directPathfinder;
         private readonly IPathfinder astarPathfinder;
 
@@ -35,7 +34,6 @@ namespace ImprovedAI.Pathfinding
         private readonly AdjacencyList traveledGraph;
 
         // Current active pathfinding state
-        private PathfindingState currentState;
         Base6Directions.Direction controllerForwardDirection;
         public PathfindingManager(Base6Directions.Direction controllerFwdDirection)
         {
@@ -44,8 +42,8 @@ namespace ImprovedAI.Pathfinding
             controllerForwardDirection = controllerFwdDirection;
 
             // Initialize available pathfinders
-            directPathfinder = config?.AllowDirectPathfinding == true ? new DirectPathfinder() : null;
-            astarPathfinder = config?.AllowAStar == true ? new AStarPathfinder() : null;
+            directPathfinder = config?.AllowDirectPathfinding() == true ? new DirectPathfinder() : null;
+            astarPathfinder = config?.AllowAStar() == true ? new AStarPathfinder() : null;
 
             if (directPathfinder == null)
             {
@@ -67,8 +65,8 @@ namespace ImprovedAI.Pathfinding
 
             context.WaypointDistance = MathHelper.Clamp(
                 context.WaypointDistance,
-                config.MinWaypointDistance,
-                config.MaxWaypointDistance);
+                config.MinWaypointDistance(),
+                config.MaxWaypointDistance());
 
             var distance = Vector3D.Distance(currentPosition, targetPosition);
 
@@ -109,7 +107,7 @@ namespace ImprovedAI.Pathfinding
                     return waypoint.Value;
                 }
 
-                if (config.AllowRepathing)
+                if (config.AllowRepathing())
                 {
                     return HandleRepathing(currentPosition, targetPosition, context, pathfinder);
                 }
@@ -122,7 +120,7 @@ namespace ImprovedAI.Pathfinding
                 stopwatch.Stop();
                 Log.Error("PathfindingManager: Exception in GetNextWaypoint: {0}", ex.Message);
 
-                if (config.AllowRepathing)
+                if (config.AllowRepathing())
                 {
                     return HandleEmergencyPath(currentPosition, targetPosition, context);
                 }
@@ -147,8 +145,8 @@ namespace ImprovedAI.Pathfinding
 
             context.WaypointDistance = MathHelper.Clamp(
                 context.WaypointDistance,
-                config.MinWaypointDistance,
-                config.MaxWaypointDistance);
+                config.MinWaypointDistance(),
+                config.MaxWaypointDistance()  );
 
             var pathfinder = SelectPathfinder(start, end, context);
             if (pathfinder == null)
@@ -170,7 +168,7 @@ namespace ImprovedAI.Pathfinding
                 }
 
                 // Path invalid, try fallback
-                if (config.AllowRepathing && pathfinder != directPathfinder)
+                if (config.AllowRepathing() && pathfinder != directPathfinder)
                 {
                     Log.Warning("PathfindingManager: Primary pathfinder failed, falling back to direct");
                     path = directPathfinder?.CalculatePath(start, end, context);
@@ -187,7 +185,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check if we're allowed to use emergency path
-            if (config.AllowRepathing)
+            if (config.AllowRepathing())
             {
                 Log.Warning("PathfindingManager: All pathfinders failed, using emergency path");
                 return CreateEmergencyPath(start, end);
@@ -225,10 +223,10 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check waypoint count limits
-            if (path.Count > config.MaxPathNodes)
+            if (path.Count > config.MaxPathNodes())
             {
                 Log.Warning("PathfindingManager: Path exceeds maximum node count ({0} > {1})",
-                    path.Count, config.MaxPathNodes);
+                    path.Count, config.MaxPathNodes());
                 return false;
             }
 
@@ -237,13 +235,13 @@ namespace ImprovedAI.Pathfinding
             {
                 var distance = Vector3D.Distance(path[i], path[i + 1]);
 
-                if (distance < config.MinWaypointDistance * 0.5) // Allow some tolerance
+                if (distance < config.MinWaypointDistance() * 0.5) // Allow some tolerance
                 {
                     Log.Warning("PathfindingManager: Waypoints too close together at index {0}", i);
                     return false;
                 }
 
-                if (distance > config.MaxWaypointDistance * 2.0) // Allow some tolerance
+                if (distance > config.MaxWaypointDistance() * 2.0) // Allow some tolerance
                 {
                     Log.Warning("PathfindingManager: Waypoints too far apart at index {0}", i);
                     return false;
@@ -251,7 +249,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Optional: Check if path stays at safe altitude in gravity
-            if (config.UsePlanetAwarePathfinding && context.IsInPlanetGravity())
+            if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity())
             {
                 foreach (var waypoint in path)
                 {
@@ -269,7 +267,7 @@ namespace ImprovedAI.Pathfinding
 
                     // Manually set position for check
                     var altitude = context.GetSurfaceAltitude();
-                    if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer)
+                    if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer())
                     {
                         Log.Warning("PathfindingManager: Path goes below safe altitude");
                         return false;
@@ -288,7 +286,7 @@ namespace ImprovedAI.Pathfinding
             var distance = Vector3D.Distance(start, end);
 
             // For very short distances, always use direct pathfinding
-            if (distance < config.MinWaypointDistance * 2)
+            if (distance < config.MinWaypointDistance() * 2)
             {
                 return directPathfinder;
             }
@@ -302,7 +300,7 @@ namespace ImprovedAI.Pathfinding
                     var complexity = astarPathfinder.EstimatedComplexity(start, end);
 
                     // Only use A* if the complexity is reasonable
-                    if (complexity < config.MaxPathNodes)
+                    if (complexity < config.MaxPathNodes())
                     {
                         Log.Verbose("PathfindingManager: Selected A* pathfinder (complexity: {0})", complexity);
                         return astarPathfinder;
@@ -329,7 +327,7 @@ namespace ImprovedAI.Pathfinding
             Log.Info("PathfindingManager: Attempting repathing from {0}", failedPathfinder.Method);
 
             // Try to find a previously traveled node that could help
-            var nearbyNodes = FindNearbyTraveledNodes(currentPosition, config.MaxWaypointDistance * 2);
+            var nearbyNodes = FindNearbyTraveledNodes(currentPosition, config.MaxWaypointDistance() * 2);
 
             foreach (var node in nearbyNodes)
             {
@@ -366,7 +364,7 @@ namespace ImprovedAI.Pathfinding
         private Vector3D? HandleEmergencyPath(Vector3D currentPosition, Vector3D targetPosition,
             PathfindingContext context)
         {
-            if (!config.AllowRepathing)
+            if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: Emergency path needed but repathing is disabled");
                 return null;
@@ -377,18 +375,18 @@ namespace ImprovedAI.Pathfinding
             // Calculate a safe intermediate waypoint
             var direction = Vector3D.Normalize(targetPosition - currentPosition);
             var distance = Vector3D.Distance(currentPosition, targetPosition);
-            var waypointDistance = Math.Min(distance * 0.5, config.MaxWaypointDistance);
+            var waypointDistance = Math.Min(distance * 0.5, config.MaxWaypointDistance());
 
             var waypoint = currentPosition + direction * waypointDistance;
 
             // If in gravity, ensure we maintain safe altitude
-            if (context.IsInPlanetGravity() && config.UsePlanetAwarePathfinding)
+            if (context.IsInPlanetGravity() && config.UsePlanetAwarePathfinding())
             {
                 var altitude = context.GetSurfaceAltitude();
-                if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer)
+                if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer())
                 {
                     var gravityUp = Vector3D.Normalize(-context.GravityVector);
-                    waypoint += gravityUp * (config.MinAltitudeBuffer - altitude.Value);
+                    waypoint += gravityUp * (config.MinAltitudeBuffer() - altitude.Value);
                 }
             }
 
@@ -401,7 +399,7 @@ namespace ImprovedAI.Pathfinding
         private Vector3D? HandleNoPathfinderAvailable(Vector3D currentPosition, Vector3D targetPosition,
             PathfindingContext context)
         {
-            if (!config.AllowRepathing)
+            if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: No pathfinder available and repathing disabled");
                 return null;
@@ -411,7 +409,7 @@ namespace ImprovedAI.Pathfinding
 
             var direction = Vector3D.Normalize(targetPosition - currentPosition);
             var distance = Vector3D.Distance(currentPosition, targetPosition);
-            var step = Math.Min(distance, config.MaxWaypointDistance);
+            var step = Math.Min(distance, config.MaxWaypointDistance());
 
             return currentPosition + direction * step;
         }
@@ -421,7 +419,7 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         private List<Vector3D> CreateEmergencyPath(Vector3D start, Vector3D end)
         {
-            if (!config.AllowRepathing)
+            if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: Emergency path requested but repathing is disabled");
                 return new List<Vector3D>(); // Empty path
@@ -439,8 +437,8 @@ namespace ImprovedAI.Pathfinding
             try
             {
                 // Convert to grid coordinates for caching (reduce precision to avoid bloat)
-                var gridFrom = Vector3I.Round(from / config.MaxWaypointDistance);
-                var gridTo = Vector3I.Round(to / config.MaxWaypointDistance);
+                var gridFrom = Vector3I.Round(from / config.MaxWaypointDistance());
+                var gridTo = Vector3I.Round(to / config.MaxWaypointDistance());
 
                 var distance = Vector3D.Distance(from, to);
 
@@ -461,8 +459,8 @@ namespace ImprovedAI.Pathfinding
         private List<Vector3D> FindNearbyTraveledNodes(Vector3D position, double searchRadius)
         {
             var nearbyNodes = new List<Vector3D>();
-            var gridPosition = Vector3I.Round(position / config.MaxWaypointDistance);
-            var searchRadiusGrid = (int)Math.Ceiling(searchRadius / config.MaxWaypointDistance);
+            var gridPosition = Vector3I.Round(position / config.MaxWaypointDistance());
+            var searchRadiusGrid = (int)Math.Ceiling(searchRadius / config.MaxWaypointDistance());
 
             try
             {
@@ -472,7 +470,7 @@ namespace ImprovedAI.Pathfinding
                     if (gridDistance <= searchRadiusGrid)
                     {
                         // Convert back to world space
-                        var worldPos = new Vector3D(node.X, node.Y, node.Z) * config.MaxWaypointDistance;
+                        var worldPos = new Vector3D(node.X, node.Y, node.Z) * config.MaxWaypointDistance();
                         nearbyNodes.Add(worldPos);
                     }
                 }
@@ -544,11 +542,11 @@ namespace ImprovedAI.Pathfinding
                 return false; // Let normal pathfinding handle it
 
             // Check if distance is within raycast range
-            if (distance > config.MaxSimulatedCameraRaycastMeters)
+            if (distance > config.MaxSimulatedCameraRaycastMeters())
                 return false; // Too far for raycast
 
             // Check if we have cameras to perform the raycast
-            if (config.RequireCamerasForPathfinding)
+            if (config.RequireCamerasForPathfinding())
             {
                 var direction = end - start;
                 if (!context.CanRaycastInDirection(direction))
