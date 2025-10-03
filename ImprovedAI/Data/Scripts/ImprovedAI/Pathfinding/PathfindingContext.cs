@@ -44,19 +44,19 @@ namespace ImprovedAI.Pathfinding
 
 
         public PathfindingContext(
-            IPathfindingConfig pathfindingConfig,
-            IMyShipController controller,
-            List<IMySensorBlock> sensors,
-            List<IMyCameraBlock> cameras,
-            List<IMyThrust> thrusters,
-            float shipMass,
-            float maxLoad,
-            float waypointDistance,
-            Base6Directions.Direction controllerForwardDirection,
-            IMyGamePruningStructureDelegate pruningStructureDelegate = null,
-            Vector3D? planetCenter = null,
-            double? planetRadius = null
-        )
+             IPathfindingConfig pathfindingConfig,
+             IMyShipController controller,
+             List<IMySensorBlock> sensors,
+             List<IMyCameraBlock> cameras,
+             List<IMyThrust> thrusters,
+             float shipMass,
+             float maxLoad,
+             float waypointDistance,
+             Base6Directions.Direction controllerForwardDirection,
+             IMyGamePruningStructureDelegate pruningStructureDelegate = null,
+             Vector3D? planetCenter = null,
+             double? planetRadius = null
+         )
         {
             PathfindingConfig = pathfindingConfig;
             Controller = controller;
@@ -65,8 +65,7 @@ namespace ImprovedAI.Pathfinding
             WaypointDistance = waypointDistance;
             CubeGrid = controller?.CubeGrid;
 
-            this.pruningStructure = pruningStructure ?? new MyGamePruningStructureDelegate();
-
+            this.pruningStructure = pruningStructureDelegate ?? new MyGamePruningStructureDelegate();
 
             // Get controller's flight direction
             ControllerForwardDirection = controllerForwardDirection;
@@ -79,9 +78,15 @@ namespace ImprovedAI.Pathfinding
             {
                 PlanetCenter = planetCenter.Value;
                 PlanetRadius = planetRadius.Value;
-
+                isInPlanetGravity = true;  // FIX: Set flag
             }
-   
+            else if (GravityVector.LengthSquared() > 0.1)
+            {
+                // In gravity but no explicit planet data provided
+                isInPlanetGravity = true;  // FIX: Set flag based on gravity
+            }
+
+            // FIX: Check correct config for sensors
             if (PathfindingConfig.RequireSensorsForPathfinding())
             {
                 // Build sensor cache
@@ -101,33 +106,40 @@ namespace ImprovedAI.Pathfinding
                         }
                     }
                 }
-                Sensors = sensors; // Keep original list reference
+                Sensors = sensors;
             }
 
-            if (PathfindingConfig.RequireSensorsForPathfinding())
+            if (PathfindingConfig.RequireCamerasForPathfinding())
             {
-                // Build camera direction cache
                 CamerasByDirection = new Dictionary<Base6Directions.Direction, List<IMyCameraBlock>>();
                 if (cameras != null)
                 {
+                    // Create a rotation matrix to transform from ship coordinates to navigation coordinates
+                    // This accounts for the controller's forward direction setting
+                    var navigationRotation = PathfindingUtil.GetNavigationRotationMatrix(ControllerForwardDirection);
+
                     foreach (var camera in cameras)
                     {
                         if (camera?.IsFunctional == true)
                         {
                             // Determine which direction this camera faces in ship's local space
                             var cameraForward = camera.WorldMatrix.Forward;
-                            var localForward = Vector3D.TransformNormal(cameraForward, MatrixD.Transpose(controller.WorldMatrix));
+                            var localForward = Vector3D.TransformNormal(cameraForward,
+                                MatrixD.Transpose(controller.WorldMatrix));
 
-                            // Find dominant direction
-                            var absDir = Vector3D.Abs(localForward);
+                            // Transform from ship coordinates to navigation coordinates
+                            var navigationForward = Vector3D.TransformNormal(localForward, navigationRotation);
+
+                            // Find dominant direction in navigation space
+                            var absDir = Vector3D.Abs(navigationForward);
                             Base6Directions.Direction direction;
 
                             if (absDir.Z > absDir.X && absDir.Z > absDir.Y)
-                                direction = localForward.Z > 0 ? Base6Directions.Direction.Forward : Base6Directions.Direction.Backward;
+                                direction = navigationForward.Z > 0 ? Base6Directions.Direction.Forward : Base6Directions.Direction.Backward;
                             else if (absDir.Y > absDir.X)
-                                direction = localForward.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
+                                direction = navigationForward.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
                             else
-                                direction = localForward.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
+                                direction = navigationForward.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
 
                             // Add to dictionary
                             if (!CamerasByDirection.ContainsKey(direction))
@@ -137,37 +149,15 @@ namespace ImprovedAI.Pathfinding
                         }
                     }
                 }
-                Cameras = cameras; // Keep original list reference
+                Cameras = cameras;
             }
 
-            // Build thrust data cache
-            ThrustData = new ThrustData();
-            if (thrusters != null)
+            // Build thrust data
+            if (thrusters != null && thrusters.Count > 0)
             {
-                foreach (var thruster in thrusters)
-                {
-                    if (thruster?.IsWorking == true)
-                    {
-                        Vector3I thrustDirection = thruster.GridThrustDirection;
-
-                        if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Forward))
-                            ThrustData.Forward += thruster.MaxEffectiveThrust;
-                        else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Backward))
-                            ThrustData.Backward += thruster.MaxEffectiveThrust;
-                        else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Up))
-                            ThrustData.Up += thruster.MaxEffectiveThrust;
-                        else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Down))
-                            ThrustData.Down += thruster.MaxEffectiveThrust;
-                        else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Left))
-                            ThrustData.Left += thruster.MaxEffectiveThrust;
-                        else if (thrustDirection == Base6Directions.GetIntVector(Base6Directions.Direction.Right))
-                            ThrustData.Right += thruster.MaxEffectiveThrust;
-                    }
-                }
+                ThrustData = new ThrustData();
+                ThrustData.CalculateThrust(thrusters);
             }
-
-            // Load pathfinding configuration
-            PathfindingConfig = IAISession.Instance?.GetConfig()?.Pathfinding;
         }
         public double? GetSurfaceAltitude()
         {

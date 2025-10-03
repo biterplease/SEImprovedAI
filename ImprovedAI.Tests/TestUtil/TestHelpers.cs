@@ -8,7 +8,7 @@ using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRageMath;
 
-namespace ImprovedAI.Tests
+namespace ImprovedAI.TestUtil
 {
     public static class TestHelpers
     {
@@ -56,7 +56,7 @@ namespace ImprovedAI.Tests
             }
 
             return new PathfindingContext(
-                new FakeConfig(),
+                new FakePathfindingConfig(),
                 controllerMock.Object,
                 new List<IMySensorBlock>(),
                 new List<IMyCameraBlock>(),

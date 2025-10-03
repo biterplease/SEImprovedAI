@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAI", "ImprovedAI\Im
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAI.ConsoleTests", "ImprovedAI.ConsoleTests\ImprovedAI.ConsoleTests.csproj", "{3F1085D5-8C60-45CF-BC11-A310A0D468FB}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAI.Tests", "ImprovedAI.Tests\ImprovedAI.Tests.csproj", "{1C5A167B-B9D5-4FFA-B9DF-2D7D6249C825}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -21,6 +23,10 @@ Global
 		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Debug|x64.Build.0 = Debug|x64
 		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Release|x64.ActiveCfg = Release|x64
 		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Release|x64.Build.0 = Release|x64
+		{1C5A167B-B9D5-4FFA-B9DF-2D7D6249C825}.Debug|x64.ActiveCfg = Debug|x64
+		{1C5A167B-B9D5-4FFA-B9DF-2D7D6249C825}.Debug|x64.Build.0 = Debug|x64
+		{1C5A167B-B9D5-4FFA-B9DF-2D7D6249C825}.Release|x64.ActiveCfg = Release|x64
+		{1C5A167B-B9D5-4FFA-B9DF-2D7D6249C825}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

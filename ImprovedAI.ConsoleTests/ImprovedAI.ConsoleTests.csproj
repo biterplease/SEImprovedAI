@@ -96,6 +96,7 @@
   <ItemGroup>
     <Compile Include="Pathfinding\AStarPathfindingTests.cs" />
     <Compile Include="Pathfinding\DirectPathfinderTests.cs" />
+    <Compile Include="Pathfinding\ExpandedBenchmarks.cs" />
     <Compile Include="Pathfinding\FakeConfig.cs" />
     <Compile Include="Pathfinding\PathfindingContextTests.cs" />
     <Compile Include="Pathfinding\PathfindingTestRunner.cs" />

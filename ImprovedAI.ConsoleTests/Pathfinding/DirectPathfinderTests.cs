@@ -56,6 +56,8 @@ namespace ImprovedAI.Tests
             try
             {
                 var config = CreateTestConfig();
+                config.requireCamerasForPathfinding = false;
+                config.requireSensorsForPathfinding = false;
                 var pathfinder = new DirectPathfinder(config);
                 var context = CreateTestContext(Vector3.Zero);
 
@@ -168,6 +170,10 @@ namespace ImprovedAI.Tests
                 config.allowRepathing = true;
                 config.maxRepositionAttempts = 5;
                 var pathfinder = new DirectPathfinder(config);
+
+                var mockPruning = new MockGamePruningStructureDelegate();
+                var obstacle = MockPlanetDelegate.CreateMockObstacle(new Vector3D(25, 0, 0));
+                mockPruning.AddMockEntity(obstacle);
 
                 var context = CreateTestContext(Vector3.Zero);
 

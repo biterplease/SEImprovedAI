@@ -97,7 +97,9 @@ namespace ImprovedAI.Tests
                     1000f,
                     5000f,
                     50f,
-                    Base6Directions.Direction.Forward
+                    Base6Directions.Direction.Forward,
+                    planetCenter:  new Vector3D(0,-6000,0),
+                    planetRadius: 60000.0 
                 );
 
                 Assert(context.GravityVector.LengthSquared() > 0, "Gravity not detected");
@@ -203,9 +205,9 @@ namespace ImprovedAI.Tests
                     MockFactory.CreateMockCamera(Base6Directions.Direction.Forward),
                     MockFactory.CreateMockCamera(Base6Directions.Direction.Up)
                 };
-
+                var config = new FakeConfig { requireCamerasForPathfinding = true };
                 var context = new PathfindingContext(
-                    new FakeConfig(),
+                    config,
                     controller,
                     new List<IMySensorBlock>(),
                     cameras,
@@ -251,7 +253,10 @@ namespace ImprovedAI.Tests
                     1000f,
                     5000f,
                     50f,
-                    Base6Directions.Direction.Forward
+                    Base6Directions.Direction.Forward,
+                    new MockGamePruningStructureDelegate(),
+                    planetCenter,
+                    planetRadius
                 );
 
                 var altitude = context.GetSurfaceAltitude();
@@ -294,7 +299,10 @@ namespace ImprovedAI.Tests
                     1000f,
                     5000f,
                     50f,
-                    Base6Directions.Direction.Forward
+                    Base6Directions.Direction.Forward,
+                    pruningStructureDelegate: null,
+                    planetCenter: new Vector3D(0, -60000,0),
+                    planetRadius: 60000.0
                 );
 
                 // Test climbing upward

@@ -12,6 +12,7 @@ namespace ImprovedAI.TestRunner
                 args = new[] { "all" };
 
             PathfindingTestRunner.RunAll(args);
+            ExpandedBenchmarks.RunAll();
         }
     }
 }

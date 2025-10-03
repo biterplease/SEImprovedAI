@@ -1,9 +1,8 @@
 ﻿using ImprovedAI.Config;
-using System;
 
-namespace ImprovedAI.Tests
+namespace ImprovedAI.TestUtil
 {
-    public class FakeConfig : IPathfindingConfig
+    public class FakePathfindingConfig : IPathfindingConfig
     {
         public bool requireSensorsForPathfinding { get; set; } = false;
         public bool RequireSensorsForPathfinding() => requireSensorsForPathfinding;
