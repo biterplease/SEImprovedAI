@@ -41,7 +41,7 @@ namespace ImprovedAI.Pathfinding
 
             // Initialize available pathfinders
             directPathfinder = config?.AllowDirectPathfinding == true ? new DirectPathfinder() : null;
-            //astarPathfinder = config?.AllowAStar == true ? new AStarPathfinder() : null;
+            astarPathfinder = config?.AllowAStar == true ? new AStarPathfinder() : null;
 
             if (directPathfinder == null)
             {
