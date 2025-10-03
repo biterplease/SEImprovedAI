@@ -12,7 +12,6 @@ namespace ImprovedAI.TestRunner
                 args = new[] { "all" };
 
             PathfindingTestRunner.RunAll(args);
-            Thread.Sleep(new TimeSpan(0,0,30));
         }
     }
 }

@@ -472,6 +472,7 @@ namespace ImprovedAI.Tests
             Console.WriteLine($"Directions tested: {directions.Length}");
         }
 
+
         private static void BenchmarkScaling()
         {
             Console.WriteLine("\n--- Benchmark: Distance Scaling ---");
@@ -480,18 +481,37 @@ namespace ImprovedAI.Tests
             var pathfinder = new DirectPathfinder(config);
             var context = CreateTestContext(Vector3.Zero);
 
-            var distances = new[] { 50, 100, 250, 500, 1000, 2000, 5000 };
+            var distances = new KeyValuePair<int, float>[] {
+                new KeyValuePair<int,float>(50, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(100, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(250, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(500, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(1000, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(2000, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(5000, config.maxWaypointDistance),
+                new KeyValuePair<int,float>(5000, 200f),
+                new KeyValuePair<int,float>(5000, 500f),
+                new KeyValuePair<int,float>(5000, 1000f),
+                new KeyValuePair<int,float>(10000, 200f),
+                new KeyValuePair<int,float>(10000, 500f),
+                new KeyValuePair<int,float>(10000, 1000f),
+                new KeyValuePair<int,float>(50000, 1000f),
+                new KeyValuePair<int,float>(300000, 5000f),
+                new KeyValuePair<int,float>(300000, 10000f),
+            };
 
-            Console.WriteLine("Distance | Time (μs) | Waypoints");
-            Console.WriteLine("---------|-----------|----------");
+            Console.WriteLine("Distance | MWP       | Time (μs) | Waypoints");
+            Console.WriteLine("---------|-----------|-----------|----------");
 
-            foreach (var distance in distances)
+            foreach (var kvp in distances)
             {
+                var originalDistance = kvp.Value;
+                config.maxWaypointDistance = kvp.Value;
                 var start = new Vector3D(0, 0, 0);
-                var end = new Vector3D(distance, 0, 0);
+                var end = new Vector3D(kvp.Key, 0, 0);
 
                 var sw = Stopwatch.StartNew();
-                var iterations = 100;
+                var iterations = 1000;
 
                 for (int i = 0; i < iterations; i++)
                 {
@@ -500,9 +520,10 @@ namespace ImprovedAI.Tests
 
                 sw.Stop();
                 var avgUs = (sw.ElapsedMilliseconds * 1000.0) / iterations;
-                var numWaypoints = (int)(distance / context.WaypointDistance) + 1;
+                var numWaypoints = (int)(kvp.Key / context.WaypointDistance) + 1;
 
-                Console.WriteLine($"{distance,8} | {avgUs,9:F2} | {numWaypoints,9}");
+                Console.WriteLine($"{kvp.Key,8} | {config.maxWaypointDistance,9:F0} | {avgUs,9:F2} | {numWaypoints,9}");
+                config.maxWaypointDistance = originalDistance;
             }
         }
 
