@@ -1,11 +1,15 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Data.Scripts.ImprovedAI.Pathfinding;
 using ImprovedAI.Utils.Logging;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using VRage.Game.Entity;
+using VRage.Game.ModAPI;
+using VRage.ModAPI;
 using VRageMath;
 
 namespace ImprovedAI.Pathfinding
@@ -61,20 +65,28 @@ namespace ImprovedAI.Pathfinding
                 return null;
             }
 
-            // Clamp waypoint distance to server limits
             context.WaypointDistance = MathHelper.Clamp(
                 context.WaypointDistance,
                 config.MinWaypointDistance,
                 config.MaxWaypointDistance);
 
+            var distance = Vector3D.Distance(currentPosition, targetPosition);
+
             // Check if we're close enough to target
-            var distanceToTarget = Vector3D.Distance(currentPosition, targetPosition);
-            if (distanceToTarget < context.WaypointDistance)
+            if (distance < context.WaypointDistance)
             {
-                return targetPosition; // We're close, just go directly
+                return targetPosition;
             }
 
-            // Try to get waypoint from preferred pathfinder
+            // OPTIMIZATION: Check for direct line of sight before expensive pathfinding
+            // This is worth it for medium-to-long distances where A* would be costly
+            if (distance > 50.0 && HasDirectLineOfSight(currentPosition, targetPosition, context))
+            {
+                Log.Info("PathfindingManager: Using direct pathfinding (line of sight confirmed)");
+                return directPathfinder.GetNextWaypoint(currentPosition, targetPosition, context);
+            }
+
+            // No direct line of sight, use normal pathfinder selection
             var pathfinder = SelectPathfinder(currentPosition, targetPosition, context);
             if (pathfinder == null)
             {
@@ -90,15 +102,13 @@ namespace ImprovedAI.Pathfinding
 
                 if (waypoint.HasValue)
                 {
-                    // Cache this waypoint in traveled graph for potential repathing
-                    CacheWaypoint(currentPosition, waypoint.Value, distanceToTarget);
+                    CacheWaypoint(currentPosition, waypoint.Value, distance);
 
                     stopwatch.Stop();
                     LogPathfindingResult(pathfinder.Method, stopwatch.Elapsed, waypoint.Value);
                     return waypoint.Value;
                 }
 
-                // Pathfinder failed, try repathing if allowed
                 if (config.AllowRepathing)
                 {
                     return HandleRepathing(currentPosition, targetPosition, context, pathfinder);
@@ -520,6 +530,87 @@ namespace ImprovedAI.Pathfinding
                 Log.Warning("PathfindingManager: Traveled graph has {0} nodes, clearing to prevent bloat", nodeCount);
                 ClearTraveledGraph();
             }
+        }
+        /// <summary>
+        /// Check if there's a direct, unobstructed line of sight to the target
+        /// Only performs raycast if cameras are available and distance is reasonable
+        /// </summary>
+        private bool HasDirectLineOfSight(Vector3D start, Vector3D end, PathfindingContext context)
+        {
+            var distance = Vector3D.Distance(start, end);
+
+            // Don't bother for very short distances (direct pathfinder is already fast enough)
+            if (distance < 50.0)
+                return false; // Let normal pathfinding handle it
+
+            // Check if distance is within raycast range
+            if (distance > config.MaxSimulatedCameraRaycastMeters)
+                return false; // Too far for raycast
+
+            // Check if we have cameras to perform the raycast
+            if (config.RequireCamerasForPathfinding)
+            {
+                var direction = end - start;
+                if (!context.CanRaycastInDirection(direction))
+                {
+                    // No camera facing target, can't verify line of sight
+                    return false;
+                }
+            }
+
+            // Perform the actual raycast
+            var ray = new LineD(start, end);
+            var results = new List<MyLineSegmentOverlapResult<MyEntity>>();
+
+            try
+            {
+                MyGamePruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, results);
+
+                // Check if any obstacles are in the way
+                foreach (var result in results)
+                {
+                    if (IsObstacleEntity(result.Element, context))
+                    {
+                        Log.Verbose("PathfindingManager: Direct line of sight blocked by {0}",
+                            result.Element.DisplayName ?? "unknown");
+                        return false;
+                    }
+                }
+
+                Log.Verbose("PathfindingManager: Direct line of sight confirmed ({0:F1}m)", distance);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Warning("PathfindingManager: Line of sight check failed: {0}", ex.Message);
+                return false; // Assume blocked on error
+            }
+        }
+
+        /// <summary>
+        /// Determine if an entity is an obstacle (reuse from DirectPathfinder)
+        /// </summary>
+        private bool IsObstacleEntity(IMyEntity entity, PathfindingContext context)
+        {
+            if (entity == null) return false;
+            if (entity.EntityId == context.CubeGrid?.EntityId) return false;
+
+            var grid = entity as IMyCubeGrid;
+            if (grid != null)
+            {
+                var connectedGrids = new List<IMyCubeGrid>();
+                MyAPIGateway.GridGroups.GetGroup(context.CubeGrid, GridLinkTypeEnum.Mechanical, connectedGrids);
+
+                if (connectedGrids.Contains(grid))
+                    return false;
+
+                return true;
+            }
+
+            if (entity is MyPlanet) return true;
+            if (entity.ToString().Contains("Asteroid")) return true;
+
+            return false;
         }
     }
 }

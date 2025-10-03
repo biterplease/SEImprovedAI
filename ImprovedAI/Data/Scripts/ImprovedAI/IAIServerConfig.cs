@@ -174,7 +174,7 @@ namespace ImprovedAI.Config
             /// <summary>
             /// Max number of waypoints created when pathfinding.
             /// </summary>
-            public int MaxPathNodes { get; internal set; } = 500;
+            public int MaxPathNodes { get; internal set; } = 200;
             public TimeSpan MaxPathfindingTime { get; internal set; } = TimeSpan.FromMilliseconds(50);
         }
 
