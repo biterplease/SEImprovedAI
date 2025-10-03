@@ -5,6 +5,8 @@ VisualStudioVersion = 17.13.35931.197
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAI", "ImprovedAI\ImprovedAI.csproj", "{B00E0545-3323-40E4-9BF3-8F75DCD81A57}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImprovedAI.ConsoleTests", "ImprovedAI.ConsoleTests\ImprovedAI.ConsoleTests.csproj", "{3F1085D5-8C60-45CF-BC11-A310A0D468FB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -15,6 +17,10 @@ Global
 		{B00E0545-3323-40E4-9BF3-8F75DCD81A57}.Debug|x64.Build.0 = Debug|x64
 		{B00E0545-3323-40E4-9BF3-8F75DCD81A57}.Release|x64.ActiveCfg = Release|x64
 		{B00E0545-3323-40E4-9BF3-8F75DCD81A57}.Release|x64.Build.0 = Release|x64
+		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Debug|x64.ActiveCfg = Debug|x64
+		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Debug|x64.Build.0 = Debug|x64
+		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Release|x64.ActiveCfg = Release|x64
+		{3F1085D5-8C60-45CF-BC11-A310A0D468FB}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

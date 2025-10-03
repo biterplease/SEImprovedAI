@@ -19,6 +19,7 @@ namespace ImprovedAI.Pathfinding
             public float MaxRange { get; set; }
         }
         public IMyShipController Controller { get; set; }
+        public IMyGamePruningStructureDelegate pruningStructure { get; set; }
         public Base6Directions.Direction ControllerForwardDirection { get; set; }
         public IPathfindingConfig PathfindingConfig;
         public List<IMySensorBlock> Sensors { get; set; }
@@ -34,12 +35,16 @@ namespace ImprovedAI.Pathfinding
         public ThrustData ThrustData { get; set; }
         public float ShipMass { get; set; }
 
+        public MyPlanet ClosestPlanet { get; set; }
+
         public Vector3D? PlanetCenter { get; set; }
         public double PlanetRadius { get; set; }
         public bool isInPlanetGravity { get; set; }
 
 
+
         public PathfindingContext(
+            IPathfindingConfig pathfindingConfig,
             IMyShipController controller,
             List<IMySensorBlock> sensors,
             List<IMyCameraBlock> cameras,
@@ -47,14 +52,20 @@ namespace ImprovedAI.Pathfinding
             float shipMass,
             float maxLoad,
             float waypointDistance,
-            Base6Directions.Direction controllerForwardDirection
+            Base6Directions.Direction controllerForwardDirection,
+            IMyGamePruningStructureDelegate pruningStructureDelegate = null,
+            Vector3D? planetCenter = null,
+            double? planetRadius = null
         )
         {
+            PathfindingConfig = pathfindingConfig;
             Controller = controller;
             ShipMass = shipMass;
             MaxLoad = maxLoad;
             WaypointDistance = waypointDistance;
             CubeGrid = controller?.CubeGrid;
+
+            this.pruningStructure = pruningStructure ?? new MyGamePruningStructureDelegate();
 
 
             // Get controller's flight direction
@@ -64,17 +75,13 @@ namespace ImprovedAI.Pathfinding
             GravityVector = controller?.GetNaturalGravity() ?? Vector3D.Zero;
 
             // Detect planet if in gravity
-            if (GravityVector.LengthSquared() > 0.1)
+            if (planetCenter != null && planetRadius != null)
             {
-                var controllerPos = controller.GetPosition();
-                var planet = MyGamePruningStructure.GetClosestPlanet(controllerPos);
-                if (planet != null)
-                {
-                    PlanetCenter = planet.PositionComp.GetPosition();
-                    PlanetRadius = planet.AverageRadius;
-                }
-            }
+                PlanetCenter = planetCenter.Value;
+                PlanetRadius = planetRadius.Value;
 
+            }
+   
             if (PathfindingConfig.RequireSensorsForPathfinding())
             {
                 // Build sensor cache

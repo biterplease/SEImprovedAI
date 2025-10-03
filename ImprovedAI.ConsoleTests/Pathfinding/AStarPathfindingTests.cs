@@ -511,6 +511,7 @@ namespace ImprovedAI.Tests
             };
 
             return new PathfindingContext(
+                new FakeConfig(),
                 controller,
                 new List<IMySensorBlock>(),
                 new List<IMyCameraBlock>(),

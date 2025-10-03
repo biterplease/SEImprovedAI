@@ -52,6 +52,7 @@ namespace ImprovedAI.Tests
             {
                 var controller = MockFactory.CreateMockController(new Vector3D(0, 0, 0));
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),
@@ -59,7 +60,8 @@ namespace ImprovedAI.Tests
                     1000f,
                     5000f,
                     50f,
-                    Base6Directions.Direction.Forward
+                    Base6Directions.Direction.Forward,
+                    new MockGamePruningStructureDelegate()
                 );
 
                 Assert(context.Controller == controller, "Controller not set");
@@ -87,6 +89,7 @@ namespace ImprovedAI.Tests
                 var controller = MockFactory.CreateMockController(position, gravity);
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),
@@ -126,6 +129,7 @@ namespace ImprovedAI.Tests
                 };
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),
@@ -163,6 +167,7 @@ namespace ImprovedAI.Tests
                 };
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     sensors,
                     new List<IMyCameraBlock>(),
@@ -200,6 +205,7 @@ namespace ImprovedAI.Tests
                 };
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     cameras,
@@ -237,6 +243,7 @@ namespace ImprovedAI.Tests
                 var controller = MockFactory.CreateMockController(position, gravity);
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),
@@ -279,6 +286,7 @@ namespace ImprovedAI.Tests
                 };
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),
@@ -317,6 +325,7 @@ namespace ImprovedAI.Tests
 
                 // Should handle null lists gracefully
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     null,
                     null,
@@ -351,6 +360,7 @@ namespace ImprovedAI.Tests
                 var controller = MockFactory.CreateMockController(position);
 
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),

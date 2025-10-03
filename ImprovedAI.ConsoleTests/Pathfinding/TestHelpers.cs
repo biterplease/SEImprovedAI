@@ -1,7 +1,10 @@
 ﻿using ImprovedAI.Pathfinding;
 using Moq;
+using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System.Collections.Generic;
+using VRage.Game.Components;
+using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRageMath;
 
@@ -53,6 +56,7 @@ namespace ImprovedAI.Tests
             }
 
             return new PathfindingContext(
+                new FakeConfig(),
                 controllerMock.Object,
                 new List<IMySensorBlock>(),
                 new List<IMyCameraBlock>(),
@@ -69,6 +73,119 @@ namespace ImprovedAI.Tests
             context.PlanetCenter = planetCenter;
             context.PlanetRadius = radius;
             context.isInPlanetGravity = true;
+        }
+    }
+    public class MockGamePruningStructureDelegate : IMyGamePruningStructureDelegate
+    {
+        private readonly List<MyEntity> entitiesToReturn;
+        private IMyPlanetDelegate planet;
+
+        public MockGamePruningStructureDelegate()
+        {
+            entitiesToReturn = new List<MyEntity>();
+        }
+
+        public void AddMockEntity(MyEntity entity)
+        {
+            entitiesToReturn.Add(entity);
+        }
+        public void AddPlanetDelegate(IMyPlanetDelegate planetDelegate)
+        {
+            planet = planetDelegate;
+        }
+
+
+        public void ClearMockEntities()
+        {
+            entitiesToReturn.Clear();
+        }
+
+        public void GetTopmostEntitiesOverlappingRay(
+            ref LineD line,
+            List<MyLineSegmentOverlapResult<MyEntity>> result,
+            MyEntityQueryType queryType = MyEntityQueryType.Both)
+        {
+            result.Clear();
+
+            // Return mock entities
+            foreach (var entity in entitiesToReturn)
+            {
+                result.Add(new MyLineSegmentOverlapResult<MyEntity>
+                {
+                    Element = entity,
+                    Distance = Vector3D.Distance(line.From, entity.PositionComp.GetPosition())
+                });
+            }
+        }
+        public IMyPlanetDelegate GetClosestPlanet(Vector3D position)
+        {
+            return planet;
+        }
+    }
+    public class MockPlanetDelegate : IMyPlanetDelegate
+    {
+        private MyPlanet mockPlanet;
+        private Vector3D mockPlanetCenter;
+        private double mockPlanetRadius;
+
+        public MockPlanetDelegate()
+        {
+            mockPlanetCenter = Vector3D.Zero;
+            mockPlanetRadius = 60000.0;
+        }
+
+        public void SetMockPlanet(Vector3D center, double radius)
+        {
+            mockPlanetCenter = center;
+            mockPlanetRadius = radius;
+
+            // Create a minimal mock planet if needed
+            // In reality, you might use Moq here too
+            mockPlanet = null; // Will be null in tests, handled by altitude calculation
+        }
+
+        public void ClearMockPlanet()
+        {
+            mockPlanet = null;
+        }
+
+        public MyPlanet GetClosestPlanet(Vector3D position)
+        {
+            // Return mock planet if position is within reasonable distance
+            if (mockPlanetRadius > 0)
+            {
+                var distance = Vector3D.Distance(position, mockPlanetCenter);
+                if (distance < mockPlanetRadius * 3) // Within 3x radius
+                {
+                    return mockPlanet; // Can be null, handled by callers
+                }
+            }
+
+            return null;
+        }
+
+        public double GetSurfaceAltitude(Vector3D position, MyPlanet planet)
+        {
+            // Use mock planet data regardless of actual planet object
+            if (mockPlanetRadius > 0)
+            {
+                var distanceFromCenter = Vector3D.Distance(position, mockPlanetCenter);
+                return distanceFromCenter - mockPlanetRadius;
+            }
+
+            return double.MaxValue;
+        }
+        private static MyEntity CreateMockObstacle(Vector3D position)
+        {
+            // Use Moq to create a minimal MyEntity
+            var entityMock = new Mock<MyEntity>();
+            var positionCompMock = new Mock<MyPositionComponentBase>();
+
+            positionCompMock.Setup(p => p.GetPosition()).Returns(position);
+            entityMock.Setup(e => e.PositionComp).Returns(positionCompMock.Object);
+            entityMock.Setup(e => e.EntityId).Returns(123);
+
+            return entityMock.Object;
         }
     }
 }

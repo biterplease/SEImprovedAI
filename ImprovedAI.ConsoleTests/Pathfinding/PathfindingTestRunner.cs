@@ -151,6 +151,7 @@ namespace ImprovedAI.Tests
                 Console.Write("✓ PathfindingContext creation... ");
                 var controller = MockFactory.CreateMockController(Vector3D.Zero);
                 var context = new PathfindingContext(
+                    new FakeConfig(),
                     controller,
                     new List<IMySensorBlock>(),
                     new List<IMyCameraBlock>(),

@@ -35,9 +35,6 @@
 	<data name="Description_ImprovedAILogisticsComputer" xml:space="preserve">
 		<value>Enables a grid to access the IAI logistics network.</value>
 	</data>
-	<data name="Description_ImprovedAILogisticsComputer" xml:space="preserve">
-		<value>Enables a grid to access the IAI logistics network.</value>
-	</data>
 	<!-- IAI Terminal controls-->
 	<data name="TerminalControl_LogisticsComputer_OperationMode_ProvideForLogistics_Title" xml:space="preserve">
 		<value>Provide for logistics</value>

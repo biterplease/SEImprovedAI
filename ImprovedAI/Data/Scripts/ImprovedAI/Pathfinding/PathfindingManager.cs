@@ -30,16 +30,26 @@ namespace ImprovedAI.Pathfinding
         private readonly IPathfinder directPathfinder;
         private readonly IPathfinder astarPathfinder;
 
+        private readonly IMyGamePruningStructureDelegate pruningStructure;
+        private readonly IMyPlanetDelegate planetDelegate;
+
         // Adjacency list for caching traveled paths and enabling efficient repathing
         private readonly AdjacencyList traveledGraph;
 
         // Current active pathfinding state
         Base6Directions.Direction controllerForwardDirection;
-        public PathfindingManager(Base6Directions.Direction controllerFwdDirection)
+        public PathfindingManager(
+            Base6Directions.Direction controllerFwdDirection,
+            PathfindingConfig pathfindingConfig,
+            IMyGamePruningStructureDelegate pruningStructure = null,
+            IMyPlanetDelegate planetDelegate = null
+        )
         {
             config = IAISession.Instance?.GetConfig()?.Pathfinding;
             traveledGraph = new AdjacencyList();
             controllerForwardDirection = controllerFwdDirection;
+            this.pruningStructure = pruningStructure ?? new MyGamePruningStructureDelegate();
+            this.planetDelegate = planetDelegate ?? new MyPlanetDelegate();
 
             // Initialize available pathfinders
             directPathfinder = config?.AllowDirectPathfinding() == true ? new DirectPathfinder() : null;
@@ -255,6 +265,7 @@ namespace ImprovedAI.Pathfinding
                 {
                     // Create temporary context at waypoint position to check altitude
                     var tempContext = new PathfindingContext(
+                        config,
                         context.Controller,
                         context.Sensors,
                         context.Cameras,
@@ -562,7 +573,7 @@ namespace ImprovedAI.Pathfinding
 
             try
             {
-                MyGamePruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, results);
+                pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, results);
 
                 // Check if any obstacles are in the way
                 foreach (var result in results)
