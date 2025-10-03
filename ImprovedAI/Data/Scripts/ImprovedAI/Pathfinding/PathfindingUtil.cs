@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using VRageMath;
 
 namespace ImprovedAI.Pathfinding
@@ -20,17 +19,17 @@ namespace ImprovedAI.Pathfinding
                 case Base6Directions.Direction.Backward:
                     return MatrixD.CreateRotationY(Math.PI); // 180° around Y
                 case Base6Directions.Direction.Up:
-                    return MatrixD.CreateRotationX(-Math.PI / 2); // -90° around X
-                                                                  // This rotates +Y to -Z (up becomes forward)
+                    return MatrixD.CreateRotationX(Math.PI / 2); // +90° around X
+                                                                 // This rotates -Z to +Y (forward becomes up)
                 case Base6Directions.Direction.Down:
-                    return MatrixD.CreateRotationX(Math.PI / 2); // 90° around X
-                                                                 // This rotates -Y to -Z (down becomes forward)
+                    return MatrixD.CreateRotationX(-Math.PI / 2); // -90° around X
+                                                                  // This rotates -Z to -Y (forward becomes down)
                 case Base6Directions.Direction.Left:
-                    return MatrixD.CreateRotationY(Math.PI / 2); // 90° around Y
-                                                                 // This rotates -X to -Z (left becomes forward)
+                    return MatrixD.CreateRotationY(Math.PI / 2); // +90° around Y
+                                                                 // This rotates -Z to -X (forward becomes left)
                 case Base6Directions.Direction.Right:
                     return MatrixD.CreateRotationY(-Math.PI / 2); // -90° around Y
-                                                                  // This rotates +X to -Z (right becomes forward)
+                                                                  // This rotates -Z to +X (forward becomes right)
                 default:
                     return MatrixD.Identity;
             }

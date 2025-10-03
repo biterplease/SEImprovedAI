@@ -83,26 +83,29 @@ namespace ImprovedAI.TestUtil
         {
             var gridMock = new Mock<IMyCubeGrid>();
             gridMock.Setup(g => g.EntityId).Returns(1);
-
-            // Create a world matrix for the grid that rotates it
-            MatrixD gridWorldMatrix = PathfindingUtil.GetNavigationRotationMatrix(direction);
-            gridMock.Setup(g => g.WorldMatrix).Returns(gridWorldMatrix);
+            // Grid is at identity orientation
+            gridMock.Setup(g => g.WorldMatrix).Returns(MatrixD.Identity);
 
             var cameraMock = new Mock<IMyCameraBlock>();
 
-            // Block orientation should be in LOCAL grid space - always Forward/Up for a "standard" camera
+            // Camera's orientation in grid-local space
+            // Cameras always have their "forward" as the direction they face
+            // and we'll use Up as the up orientation (standard orientation)
             cameraMock.Setup(c => c.Orientation).Returns(
-                new MyBlockOrientation(Base6Directions.Direction.Forward, Base6Directions.Direction.Up));
+                new MyBlockOrientation(direction, Base6Directions.Direction.Up));
 
             cameraMock.Setup(c => c.IsWorking).Returns(true);
             cameraMock.Setup(c => c.IsFunctional).Returns(true);
             cameraMock.Setup(c => c.CubeGrid).Returns(gridMock.Object);
             cameraMock.Setup(c => c.EntityId).Returns(1);
 
-            // Camera's world matrix = grid's world matrix (since camera is at grid origin with standard orientation)
-            // If you need the camera rotated relative to the grid, compose transformations here
-            cameraMock.Setup(c => c.WorldMatrix).Returns(gridWorldMatrix);
+            // Camera's world matrix = grid world matrix * local orientation matrix
+            // Since grid is at identity, camera world matrix = local orientation matrix
+            // Use GetNavigationRotationMatrix to get the correct rotation
+            MatrixD worldMatrix = PathfindingUtil.GetNavigationRotationMatrix(direction);
+            worldMatrix.Translation = Vector3D.Zero;
 
+            cameraMock.Setup(c => c.WorldMatrix).Returns(worldMatrix);
             cameraMock.Setup(c => c.AvailableScanRange).Returns(2000.0);
             cameraMock.Setup(c => c.CanScan(It.IsAny<double>())).Returns<double>(d => d <= 2000.0);
             cameraMock.Setup(c => c.GetPosition()).Returns(Vector3D.Zero);

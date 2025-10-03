@@ -52,7 +52,7 @@ namespace ImprovedAI
 
             if (absDir.Z > absDir.X && absDir.Z > absDir.Y) // Forward/Backward
             {
-                return localDirection.Z > 0 ? Forward : Backward;
+                return localDirection.Z > 0 ? Backward : Forward;
             }
             else if (absDir.Y > absDir.X) // Up/Down
             {

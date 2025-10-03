@@ -114,10 +114,6 @@ namespace ImprovedAI.Pathfinding
                 CamerasByDirection = new Dictionary<Base6Directions.Direction, List<IMyCameraBlock>>();
                 if (cameras != null)
                 {
-                    // Create a rotation matrix to transform from ship coordinates to navigation coordinates
-                    // This accounts for the controller's forward direction setting
-                    var navigationRotation = PathfindingUtil.GetNavigationRotationMatrix(ControllerForwardDirection);
-
                     foreach (var camera in cameras)
                     {
                         if (camera?.IsFunctional == true)
@@ -127,19 +123,16 @@ namespace ImprovedAI.Pathfinding
                             var localForward = Vector3D.TransformNormal(cameraForward,
                                 MatrixD.Transpose(controller.WorldMatrix));
 
-                            // Transform from ship coordinates to navigation coordinates
-                            var navigationForward = Vector3D.TransformNormal(localForward, navigationRotation);
-
-                            // Find dominant direction in navigation space
-                            var absDir = Vector3D.Abs(navigationForward);
+                            // Find dominant direction in ship's local coordinate system
+                            var absDir = Vector3D.Abs(localForward);
                             Base6Directions.Direction direction;
 
                             if (absDir.Z > absDir.X && absDir.Z > absDir.Y)
-                                direction = navigationForward.Z > 0 ? Base6Directions.Direction.Forward : Base6Directions.Direction.Backward;
+                                direction = localForward.Z > 0 ? Base6Directions.Direction.Backward : Base6Directions.Direction.Forward;
                             else if (absDir.Y > absDir.X)
-                                direction = navigationForward.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
+                                direction = localForward.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
                             else
-                                direction = navigationForward.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
+                                direction = localForward.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
 
                             // Add to dictionary
                             if (!CamerasByDirection.ContainsKey(direction))
@@ -233,7 +226,7 @@ namespace ImprovedAI.Pathfinding
         {
             return ThrustData.GetMaxThrust() > 0;
         }
-        public bool IsInPlanetGravity() { return isInPlanetGravity; }
+        public bool IsInPlanetGravity() => isInPlanetGravity;
         public bool CanRaycastInDirection(Vector3D worldDirection)
         {
             if (!PathfindingConfig.RequireCamerasForPathfinding()) return true;
@@ -247,7 +240,7 @@ namespace ImprovedAI.Pathfinding
             Base6Directions.Direction dominantDir;
 
             if (absDir.Z > absDir.X && absDir.Z > absDir.Y)
-                dominantDir = localDirection.Z > 0 ? Base6Directions.Direction.Forward : Base6Directions.Direction.Backward;
+                dominantDir = localDirection.Z > 0 ? Base6Directions.Direction.Backward : Base6Directions.Direction.Forward;
             else if (absDir.Y > absDir.X)
                 dominantDir = localDirection.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
             else
