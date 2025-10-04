@@ -1,11 +1,10 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
-using ImprovedAI.Config;
-using ImprovedAI.Pathfinding;
+﻿using ImprovedAI.Pathfinding;
 using ImprovedAI.TestUtil;
 using Sandbox.ModAPI;
-using System.Collections.Generic;
 using VRageMath;
-using VRage.Game;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Collections.Generic;
+
 
 namespace ImprovedAI.Tests.Pathfinding
 {

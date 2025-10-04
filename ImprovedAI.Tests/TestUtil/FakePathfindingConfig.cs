@@ -1,4 +1,5 @@
 ﻿using ImprovedAI.Config;
+using System;
 
 namespace ImprovedAI.TestUtil
 {

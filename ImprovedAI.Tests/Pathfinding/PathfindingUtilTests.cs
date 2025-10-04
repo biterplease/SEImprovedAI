@@ -1,5 +1,8 @@
-﻿using VRageMath;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ImprovedAI.Pathfinding;
+using VRageMath;
+using System.Collections.Generic;
+using System;
 
 namespace ImprovedAI.Tests.Pathfinding
 {
