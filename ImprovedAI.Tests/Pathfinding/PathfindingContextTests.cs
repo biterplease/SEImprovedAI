@@ -183,6 +183,8 @@ namespace ImprovedAI.Tests
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Down), "Direction.Down");
             Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
         }
+
+        public TestContext TestContext { get; set; }
         [TestMethod]
         public void TestCameraConfiguration_ControllerBackward()
         {
@@ -190,29 +192,29 @@ namespace ImprovedAI.Tests
             var controller = SEMockFactory.CreateMockController(position);
             // Same camera setup as original test
             var cameras = new List<IMyCameraBlock>
-    {
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Backward),    // 1
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward),     // 2
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),       // 3
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),        // 4
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),          // 5
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),        // 6
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
-        SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
-    };
+                {
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Backward),    // 1
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward),     // 2
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),       // 3
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Right),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),        // 4
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Left),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),          // 5
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Up),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),        // 6
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
+                    SEMockFactory.CreateMockCamera(Base6Directions.Direction.Down),
+                };
             var config = new FakePathfindingConfig { requireCamerasForPathfinding = true };
             var context = new PathfindingContext(
                 config,
@@ -287,17 +289,17 @@ namespace ImprovedAI.Tests
             Assert.IsNotNull(context.CamerasByDirection, "CamerasByDirection not created");
             // When controller faces Up: Down→Forward, Forward→Up, Up→Backward, Backward→Down
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Down), "Direction.Down");
-            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
+            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Forward), "Direction.Forward");
-            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
+            Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Right), "Direction.Right");
             Assert.HasCount(3, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Left), "Direction.Left");
             Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Backward), "Direction.Backward");
-            Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
+            Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Up), "Direction.Up");
-            Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
+            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
         }
 
         [TestMethod]
@@ -345,17 +347,17 @@ namespace ImprovedAI.Tests
             Assert.IsNotNull(context.CamerasByDirection, "CamerasByDirection not created");
             // When controller faces Down: Up→Forward, Backward→Up, Down→Backward, Forward→Down
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Up), "Direction.Up");
-            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
+            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Backward), "Direction.Backward");
-            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
+            Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Right), "Direction.Right");
             Assert.HasCount(3, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Left), "Direction.Left");
             Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Forward), "Direction.Forward");
-            Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
+            Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Down), "Direction.Down");
-            Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
+            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
         }
 
         [TestMethod]
@@ -403,13 +405,13 @@ namespace ImprovedAI.Tests
             Assert.IsNotNull(context.CamerasByDirection, "CamerasByDirection not created");
             // When controller faces Left: Right→Forward, Forward→Left, Left→Backward, Backward→Right
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Right), "Direction.Right");
-            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
+            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Forward), "Direction.Forward");
-            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
+            Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Backward), "Direction.Backward");
             Assert.HasCount(3, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Left), "Direction.Left");
-            Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
+            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Up), "Direction.Up");
             Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Down), "Direction.Down");
@@ -461,13 +463,13 @@ namespace ImprovedAI.Tests
             Assert.IsNotNull(context.CamerasByDirection, "CamerasByDirection not created");
             // When controller faces Right: Left→Forward, Backward→Left, Right→Backward, Forward→Right
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Left), "Direction.Left");
-            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
+            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Left], "Direction.Left");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Backward), "Direction.Backward");
-            Assert.HasCount(2, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
+            Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Backward], "Direction.Backward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Forward), "Direction.Forward");
             Assert.HasCount(3, context.CamerasByDirection[Base6Directions.Direction.Forward], "Direction.Forward");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Right), "Direction.Right");
-            Assert.HasCount(4, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
+            Assert.HasCount(1, context.CamerasByDirection[Base6Directions.Direction.Right], "Direction.Right");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Up), "Direction.Up");
             Assert.HasCount(5, context.CamerasByDirection[Base6Directions.Direction.Up], "Direction.Up");
             Assert.IsTrue(context.CamerasByDirection.ContainsKey(Base6Directions.Direction.Down), "Direction.Down");

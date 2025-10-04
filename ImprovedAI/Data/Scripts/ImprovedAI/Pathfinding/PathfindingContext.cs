@@ -108,7 +108,6 @@ namespace ImprovedAI.Pathfinding
                 }
                 Sensors = sensors;
             }
-
             if (PathfindingConfig.RequireCamerasForPathfinding())
             {
                 CamerasByDirection = new Dictionary<Base6Directions.Direction, List<IMyCameraBlock>>();
@@ -118,27 +117,18 @@ namespace ImprovedAI.Pathfinding
                     {
                         if (camera?.IsFunctional == true)
                         {
-                            // Determine which direction this camera faces in ship's local space
-                            var cameraForward = camera.WorldMatrix.Forward;
-                            var localForward = Vector3D.TransformNormal(cameraForward,
-                                MatrixD.Transpose(controller.WorldMatrix));
+                            // Get camera's physical mounting direction on the ship
+                            Base6Directions.Direction cameraDirection = camera.Orientation.Forward;
 
-                            // Find dominant direction in ship's local coordinate system
-                            var absDir = Vector3D.Abs(localForward);
-                            Base6Directions.Direction direction;
+                            // Map ship direction to navigation direction based on controller forward
+                            Base6Directions.Direction navDirection = MapToNavigationDirection(
+                                cameraDirection,
+                                ControllerForwardDirection);
 
-                            if (absDir.Z > absDir.X && absDir.Z > absDir.Y)
-                                direction = localForward.Z > 0 ? Base6Directions.Direction.Backward : Base6Directions.Direction.Forward;
-                            else if (absDir.Y > absDir.X)
-                                direction = localForward.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
-                            else
-                                direction = localForward.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
+                            if (!CamerasByDirection.ContainsKey(navDirection))
+                                CamerasByDirection[navDirection] = new List<IMyCameraBlock>();
 
-                            // Add to dictionary
-                            if (!CamerasByDirection.ContainsKey(direction))
-                                CamerasByDirection[direction] = new List<IMyCameraBlock>();
-
-                            CamerasByDirection[direction].Add(camera);
+                            CamerasByDirection[navDirection].Add(camera);
                         }
                     }
                 }
@@ -152,6 +142,79 @@ namespace ImprovedAI.Pathfinding
                 ThrustData.CalculateThrust(thrusters);
             }
         }
+        private static Base6Directions.Direction MapToNavigationDirection(
+    Base6Directions.Direction cameraDir,
+    Base6Directions.Direction controllerForward)
+        {
+            if (controllerForward == Base6Directions.Direction.Forward)
+                return cameraDir;
+
+            switch (controllerForward)
+            {
+                case Base6Directions.Direction.Backward:
+                    switch (cameraDir)
+                    {
+                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Forward;
+                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Backward;
+                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Left;
+                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Right;
+                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
+                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
+                    }
+                    break;
+
+                case Base6Directions.Direction.Up:
+                    switch (cameraDir)
+                    {
+                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Forward;
+                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Down;
+                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Up;
+                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Backward;
+                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Left;
+                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Right;
+                    }
+                    break;
+
+                case Base6Directions.Direction.Down:
+                    switch (cameraDir)
+                    {
+                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Forward;
+                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Backward;
+                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Up;
+                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Down;
+                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Left;
+                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Right;
+                    }
+                    break;
+
+                case Base6Directions.Direction.Left:
+                    switch (cameraDir)
+                    {
+                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Forward;
+                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Backward;
+                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Left;
+                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Right;
+                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
+                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
+                    }
+                    break;
+
+                case Base6Directions.Direction.Right:
+                    switch (cameraDir)
+                    {
+                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Forward;
+                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Backward;
+                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Left;
+                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Right;
+                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
+                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
+                    }
+                    break;
+            }
+
+            return cameraDir;
+        }
+
         public double? GetSurfaceAltitude()
         {
             if (!PlanetCenter.HasValue || Controller == null)

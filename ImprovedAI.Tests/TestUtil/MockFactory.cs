@@ -9,6 +9,7 @@ using VRageMath;
 using Moq;
 using VRage.Game;
 using ImprovedAI.Pathfinding;
+using ImprovedAI.Utils.Logging;
 
 namespace ImprovedAI.TestUtil
 {
@@ -29,7 +30,12 @@ namespace ImprovedAI.TestUtil
             var controllerMock = new Mock<IMyShipController>();
             controllerMock.Setup(c => c.GetNaturalGravity()).Returns(gravity);
             controllerMock.Setup(c => c.CubeGrid).Returns(gridMock.Object);
-            controllerMock.Setup(c => c.WorldMatrix).Returns(MatrixD.CreateTranslation(position));
+
+            // FIX: Use identity matrix with translation, not just CreateTranslation
+            var worldMatrix = MatrixD.Identity;
+            worldMatrix.Translation = position;
+            controllerMock.Setup(c => c.WorldMatrix).Returns(worldMatrix);
+
             controllerMock.Setup(c => c.GetPosition()).Returns(position);
             controllerMock.Setup(c => c.EntityId).Returns(1);
             controllerMock.Setup(c => c.DisplayName).Returns("Test Controller");
