@@ -5,6 +5,7 @@ using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -557,9 +558,14 @@ namespace ImprovedAI.Pathfinding
                 var gravityUp = Vector3D.Normalize(-context.GravityVector);
                 var climbFactor = Vector3D.Dot(Vector3D.Normalize(worldDirection), gravityUp);
 
+                var worldMatrix = context.Controller.WorldMatrix;
+                MatrixD worldMatrixTransposed;
+                MatrixD.Transpose(ref worldMatrix, out worldMatrixTransposed);
+
+
                 if (climbFactor > 0)
                 {
-                    if (!context.CanClimbInDirection(worldDirection))
+                    if (!context.CanClimbInDirection(ref worldDirection, ref worldMatrixTransposed))
                     {
                         movementCost += 1000.0f;
                     }

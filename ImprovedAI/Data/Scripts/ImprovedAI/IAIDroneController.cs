@@ -1,6 +1,7 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Messages;
 using ImprovedAI.Network;
+using ImprovedAI.Pathfinding;
 using ImprovedAI.Utils;
 using ImprovedAI.Utils.Logging;
 using Sandbox.ModAPI;
@@ -367,7 +368,7 @@ namespace ImprovedAI
             }
             else
             {
-                maxLoad = thrustData.GetMinThrust() / 2.0f;
+                maxLoad = PathfindingUtil.GetMinThrust(ref thrustData) / 2.0f;
             }
         }
 

@@ -11,7 +11,7 @@ using VRageMath;
 using ImprovedAI.TestUtil;
 
 
-namespace ImprovedAI.Tests
+namespace ImprovedAI.Tests.Pathfinding
 {
     /// <summary>
     /// Unit tests for PathfindingContext
@@ -476,98 +476,77 @@ namespace ImprovedAI.Tests
             Assert.HasCount(6, context.CamerasByDirection[Base6Directions.Direction.Down], "Direction.Down");
         }
 
-        //    public void TestPlanetAltitudeCalculation(ref int passed, ref int failed)
-        //    {
-        //        Console.Write("Test: Planet Altitude Calculation... ");
-        //        try
-        //        {
-        //            var planetCenter = new Vector3D(0, 0, 0);
-        //            var planetRadius = 60000.0;
+        [TestMethod]
+        public void TestPlanetAltitudeCalculation()
+        {
+            var planetCenter = new Vector3D(0, 0, 0);
+            var planetRadius = 60000.0;
 
-        //            var position = new Vector3D(0, planetRadius + 1000, 0);
-        //            var gravity = new Vector3D(0, -9.81f, 0);
-        //            var controller = SEMockFactory.CreateMockController(position, gravity);
+            var position = new Vector3D(0, planetRadius + 1000, 0);
+            var gravity = new Vector3D(0, -9.81f, 0);
+            var controller = SEMockFactory.CreateMockController(position, gravity);
 
-        //            var context = new PathfindingContext(
-        //                new FakeConfig(),
-        //                controller,
-        //                new List<IMySensorBlock>(),
-        //                new List<IMyCameraBlock>(),
-        //                new List<IMyThrust>(),
-        //                1000f,
-        //                5000f,
-        //                50f,
-        //                Base6Directions.Direction.Forward,
-        //                new MockGamePruningStructureDelegate(),
-        //                planetCenter,
-        //                planetRadius
-        //            );
+            var context = new PathfindingContext(
+                new FakePathfindingConfig(),
+                controller,
+                new List<IMySensorBlock>(),
+                new List<IMyCameraBlock>(),
+                new List<IMyThrust>(),
+                1000f,
+                5000f,
+                50f,
+                Base6Directions.Direction.Forward,
+                new MockGamePruningStructureDelegate(),
+                planetCenter,
+                planetRadius
+            );
 
-        //            var altitude = context.GetSurfaceAltitude();
-        //            Assert(altitude.HasValue, "Altitude not calculated");
-        //            Assert(Math.Abs(altitude.Value - 1000.0) < 1.0,
-        //                $"Altitude incorrect: expected ~1000, got {altitude.Value}");
+            var altitude = context.GetSurfaceAltitude();
+            Assert.IsNotNull(altitude, "Altitude not calculated");
+            Assert.IsLessThan(1.0, Math.Abs(altitude.Value - 1000.0),
+                $"Altitude incorrect: expected ~1000, got {altitude.Value}");
+        }
 
-        //            Console.WriteLine("PASSED");
-        //            passed++;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine($"FAILED: {ex.Message}");
-        //            failed++;
-        //        }
-        //    }
+        //[TestMethod]
+        //public void TestClimbCapability()
+        //{
+        //        var position = new Vector3D(0, 0, 0);
+        //        var gravity = new Vector3D(0, -9.81f, 0);
+        //        var controller = SEMockFactory.CreateMockController(position, gravity);
 
-        //    public void TestClimbCapability(ref int passed, ref int failed)
-        //    {
-        //        Console.Write("Test: Climb Capability... ");
-        //        try
-        //        {
-        //            var position = new Vector3D(0, 0, 0);
-        //            var gravity = new Vector3D(0, -9.81f, 0);
-        //            var controller = SEMockFactory.CreateMockController(position, gravity);
-
-        //            // Create thrusters with upward thrust
-        //            var thrusters = new List<IMyThrust>
+        //        // Create thrusters with upward thrust
+        //        var thrusters = new List<IMyThrust>
         //            {
         //                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Up, 200000f), // Strong upward
         //                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Down, 50000f)
         //            };
 
-        //            var context = new PathfindingContext(
-        //                new FakeConfig(),
-        //                controller,
-        //                new List<IMySensorBlock>(),
-        //                new List<IMyCameraBlock>(),
-        //                thrusters,
-        //                1000f,
-        //                5000f,
-        //                50f,
-        //                Base6Directions.Direction.Forward,
-        //                pruningStructureDelegate: null,
-        //                planetCenter: new Vector3D(0, -60000, 0),
-        //                planetRadius: 60000.0
-        //            );
+        //        var context = new PathfindingContext(
+        //            new FakePathfindingConfig(),
+        //            controller,
+        //            new List<IMySensorBlock>(),
+        //            new List<IMyCameraBlock>(),
+        //            thrusters,
+        //            1000f,
+        //            5000f,
+        //            50f,
+        //            Base6Directions.Direction.Forward,
+        //            pruningStructureDelegate: null,
+        //            planetCenter: new Vector3D(0, -60000, 0),
+        //            planetRadius: 60000.0
+        //        );
 
-        //            // Test climbing upward
-        //            var upDirection = new Vector3D(0, 100, 0);
-        //            Assert(context.CanClimbInDirection(upDirection), "Should be able to climb with strong thrust");
+        //        // Test climbing upward
+        //        var upDirection = new Vector3D(0, 100, 0);
+        //        Assert.IsTrue(context.CanClimbInDirection(ref upDirection), "Should be able to climb with strong thrust");
 
-        //            // Test descending (should always work with gravity)
-        //            var downDirection = new Vector3D(0, -100, 0);
-        //            Assert(context.CanClimbInDirection(downDirection), "Should be able to descend");
+        //        // Test descending (should always work with gravity)
+        //        var downDirection = new Vector3D(0, -100, 0);
+        //        Assert.IsTrue(context.CanClimbInDirection(ref downDirection), "Should be able to descend");
 
-        //            Console.WriteLine("PASSED");
-        //            passed++;
-        //        }
-        //        catch (Exception ex)
-        //        {
-        //            Console.WriteLine($"FAILED: {ex.Message}");
-        //            failed++;
-        //        }
-        //    }
+        //}
 
-        //    public void TestNullInputHandling(ref int passed, ref int failed)
+        //    public void TestNullInputHandling()
         //    {
         //        Console.Write("Test: Null Input Handling... ");
         //        try
@@ -577,7 +556,7 @@ namespace ImprovedAI.Tests
 
         //            // Should handle null lists gracefully
         //            var context = new PathfindingContext(
-        //                new FakeConfig(),
+        //                new FakePathfindingConfig(),
         //                controller,
         //                null,
         //                null,
@@ -603,7 +582,7 @@ namespace ImprovedAI.Tests
         //        }
         //    }
 
-        //    public void TestZeroThrustScenario(ref int passed, ref int failed)
+        //    public void TestZeroThrustScenario()
         //    {
         //        Console.Write("Test: Zero Thrust Scenario... ");
         //        try
@@ -612,7 +591,7 @@ namespace ImprovedAI.Tests
         //            var controller = SEMockFactory.CreateMockController(position);
 
         //            var context = new PathfindingContext(
-        //                new FakeConfig(),
+        //                new FakePathfindingConfig(),
         //                controller,
         //                new List<IMySensorBlock>(),
         //                new List<IMyCameraBlock>(),

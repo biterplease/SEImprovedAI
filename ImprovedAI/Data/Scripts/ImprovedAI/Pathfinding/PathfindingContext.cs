@@ -18,7 +18,9 @@ namespace ImprovedAI.Pathfinding
             public Vector3D Position { get; set; }
             public float MaxRange { get; set; }
         }
-        public IMyShipController Controller { get; set; }
+        public IMyShipController Controller;
+        private Vector3D _cachedLocalDirection;
+        private Vector3D _cachedLocalGravity;
         public IMyGamePruningStructureDelegate pruningStructure { get; set; }
         public Base6Directions.Direction ControllerForwardDirection { get; set; }
         public IPathfindingConfig PathfindingConfig;
@@ -26,13 +28,13 @@ namespace ImprovedAI.Pathfinding
         public List<SensorInfo> SensorInfos { get; set; }
         public List<IMyCameraBlock> Cameras { get; set; }
         public Dictionary<Base6Directions.Direction, List<IMyCameraBlock>> CamerasByDirection { get; set; }
-        public Vector3D GravityVector { get; set; }
+        public Vector3D GravityVector;
         public float MaxLoad { get; set; }
         public float WaypointDistance { get; set; }
         public IMyCubeGrid CubeGrid { get; set; }
 
         // Enhanced thrust and mass properties
-        public ThrustData ThrustData { get; set; }
+        public ThrustData ThrustData;
         public float ShipMass { get; set; }
 
         public MyPlanet ClosestPlanet { get; set; }
@@ -40,6 +42,8 @@ namespace ImprovedAI.Pathfinding
         public Vector3D? PlanetCenter { get; set; }
         public double PlanetRadius { get; set; }
         public bool isInPlanetGravity { get; set; }
+
+
 
 
 
@@ -121,7 +125,7 @@ namespace ImprovedAI.Pathfinding
                             Base6Directions.Direction cameraDirection = camera.Orientation.Forward;
 
                             // Map ship direction to navigation direction based on controller forward
-                            Base6Directions.Direction navDirection = MapToNavigationDirection(
+                            Base6Directions.Direction navDirection = PathfindingUtil.MapToNavigationDirection(
                                 cameraDirection,
                                 ControllerForwardDirection);
 
@@ -142,79 +146,7 @@ namespace ImprovedAI.Pathfinding
                 ThrustData.CalculateThrust(thrusters);
             }
         }
-        private static Base6Directions.Direction MapToNavigationDirection(
-    Base6Directions.Direction cameraDir,
-    Base6Directions.Direction controllerForward)
-        {
-            if (controllerForward == Base6Directions.Direction.Forward)
-                return cameraDir;
-
-            switch (controllerForward)
-            {
-                case Base6Directions.Direction.Backward:
-                    switch (cameraDir)
-                    {
-                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Forward;
-                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Backward;
-                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Left;
-                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Right;
-                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
-                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
-                    }
-                    break;
-
-                case Base6Directions.Direction.Up:
-                    switch (cameraDir)
-                    {
-                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Forward;
-                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Down;
-                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Up;
-                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Backward;
-                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Left;
-                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Right;
-                    }
-                    break;
-
-                case Base6Directions.Direction.Down:
-                    switch (cameraDir)
-                    {
-                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Forward;
-                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Backward;
-                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Up;
-                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Down;
-                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Left;
-                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Right;
-                    }
-                    break;
-
-                case Base6Directions.Direction.Left:
-                    switch (cameraDir)
-                    {
-                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Forward;
-                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Backward;
-                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Left;
-                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Right;
-                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
-                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
-                    }
-                    break;
-
-                case Base6Directions.Direction.Right:
-                    switch (cameraDir)
-                    {
-                        case Base6Directions.Direction.Right: return Base6Directions.Direction.Forward;
-                        case Base6Directions.Direction.Left: return Base6Directions.Direction.Backward;
-                        case Base6Directions.Direction.Forward: return Base6Directions.Direction.Left;
-                        case Base6Directions.Direction.Backward: return Base6Directions.Direction.Right;
-                        case Base6Directions.Direction.Up: return Base6Directions.Direction.Up;
-                        case Base6Directions.Direction.Down: return Base6Directions.Direction.Down;
-                    }
-                    break;
-            }
-
-            return cameraDir;
-        }
-
+ 
         public double? GetSurfaceAltitude()
         {
             if (!PlanetCenter.HasValue || Controller == null)
@@ -242,7 +174,7 @@ namespace ImprovedAI.Pathfinding
 
             // Convert world direction to local ship coordinates
             var localDirection = Vector3D.Transform(worldDirection, MatrixD.Transpose(Controller.WorldMatrix));
-            return ThrustData.GetThrustInDirection(localDirection);
+            return PathfindingUtil.GetThrustInDirection(ref localDirection, ref ThrustData);
         }
 
         /// <summary>
@@ -256,16 +188,14 @@ namespace ImprovedAI.Pathfinding
             return Vector3D.Transform(forwardDir, Controller.WorldMatrix);
         }
 
-        // Check if ship can climb against gravity in a specific direction
-        public bool CanClimbInDirection(Vector3D worldDirection)
+        public bool CanClimbInDirection(ref Vector3D worldDirection, ref MatrixD worldMatrixTransposed)
         {
-            if (Controller == null) return false;
+            Vector3D.Transform(ref worldDirection, ref worldMatrixTransposed, out _cachedLocalDirection);
+            Vector3D.Transform(ref GravityVector, ref worldMatrixTransposed, out _cachedLocalGravity);
 
-            var localDirection = Vector3D.Transform(worldDirection, MatrixD.Transpose(Controller.WorldMatrix));
-            var localGravity = Vector3D.Transform(GravityVector, MatrixD.Transpose(Controller.WorldMatrix));
-
-            return ThrustData.CanMoveInDirection(localDirection, localGravity, ShipMass);
+            return PathfindingUtil.CanMoveInDirection(ref _cachedLocalDirection, ref _cachedLocalGravity, ref ThrustData, ShipMass);
         }
+
 
         // Get maximum safe climb angle considering thrust limitations
         public double GetMaxSafeClimbAngle()
@@ -287,7 +217,7 @@ namespace ImprovedAI.Pathfinding
         // Convenience method to check if we have detailed thrust data
         public bool HasDetailedThrustData()
         {
-            return ThrustData.GetMaxThrust() > 0;
+            return PathfindingUtil.GetMaxThrust(ref ThrustData) > 0;
         }
         public bool IsInPlanetGravity() => isInPlanetGravity;
         public bool CanRaycastInDirection(Vector3D worldDirection)

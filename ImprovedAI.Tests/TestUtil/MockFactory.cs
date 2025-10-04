@@ -16,7 +16,12 @@ namespace ImprovedAI.TestUtil
 
     public static class SEMockFactory
     {
-        public static IMyShipController CreateMockController(Vector3D position, Vector3 gravity = default(Vector3))
+        public static IMyShipController CreateMockController(
+            Vector3D position,
+            Vector3 gravity = default(Vector3),
+            bool isWorking = true,
+            bool isFunctional = true
+        )
         {
             var gridMock = new Mock<IMyCubeGrid>();
             gridMock.Setup(g => g.EntityId).Returns(1);
@@ -39,15 +44,21 @@ namespace ImprovedAI.TestUtil
             controllerMock.Setup(c => c.GetPosition()).Returns(position);
             controllerMock.Setup(c => c.EntityId).Returns(1);
             controllerMock.Setup(c => c.DisplayName).Returns("Test Controller");
-            controllerMock.Setup(c => c.IsWorking).Returns(true);
-            controllerMock.Setup(c => c.IsFunctional).Returns(true);
+            controllerMock.Setup(c => c.IsWorking).Returns(isWorking);
+            controllerMock.Setup(c => c.IsFunctional).Returns(isFunctional);
             controllerMock.Setup(c => c.Orientation).Returns(
                 new MyBlockOrientation(Base6Directions.Direction.Forward, Base6Directions.Direction.Up));
 
             return controllerMock.Object;
         }
 
-        public static IMyThrust CreateMockThruster(Base6Directions.Direction direction, float maxThrust)
+        public static IMyThrust CreateMockThruster(
+            Base6Directions.Direction direction,
+            float maxThrust,
+            bool isWorking=true,
+            bool isFunctional=true,
+            Vector3D? position = null,
+            MatrixD? worldMatrix = null)
         {
             var gridMock = new Mock<IMyCubeGrid>();
             gridMock.Setup(g => g.EntityId).Returns(1);
@@ -58,12 +69,12 @@ namespace ImprovedAI.TestUtil
             thrustMock.Setup(t => t.MaxEffectiveThrust).Returns(maxThrust);
             thrustMock.Setup(t => t.MaxThrust).Returns(maxThrust);
             thrustMock.Setup(t => t.CurrentThrust).Returns(0f);
-            thrustMock.Setup(t => t.IsWorking).Returns(true);
-            thrustMock.Setup(t => t.IsFunctional).Returns(true);
+            thrustMock.Setup(t => t.IsWorking).Returns(isWorking);
+            thrustMock.Setup(t => t.IsFunctional).Returns(isFunctional);
             thrustMock.Setup(t => t.CubeGrid).Returns(gridMock.Object);
             thrustMock.Setup(t => t.EntityId).Returns(1);
-            thrustMock.Setup(t => t.WorldMatrix).Returns(MatrixD.Identity);
-            thrustMock.Setup(t => t.GetPosition()).Returns(Vector3D.Zero);
+            thrustMock.Setup(t => t.WorldMatrix).Returns(worldMatrix != null ? worldMatrix.Value : MatrixD.Identity);
+            thrustMock.Setup(t => t.GetPosition()).Returns(position != null ? position.Value : Vector3D.Zero);
 
             return thrustMock.Object;
         }

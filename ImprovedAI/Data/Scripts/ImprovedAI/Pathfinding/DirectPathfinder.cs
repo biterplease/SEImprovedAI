@@ -121,8 +121,12 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         private bool CanReachDirectly(Vector3D start, Vector3D end, PathfindingContext context)
         {
+            var diff = end - start;
+            var worldMatrix = context.Controller.WorldMatrix;
+            MatrixD worldMatrixTransposed;
+            MatrixD.Transpose(ref worldMatrix, out worldMatrixTransposed);
             // Check if we have thrust capability in this direction
-            if (!context.CanClimbInDirection(end - start))
+            if (!context.CanClimbInDirection(ref diff, ref worldMatrixTransposed))
             {
                 Log.Verbose("DirectPathfinder: Insufficient thrust to reach target directly");
                 return false;
