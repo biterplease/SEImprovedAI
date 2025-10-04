@@ -5,21 +5,25 @@ namespace ImprovedAI.Pathfinding
 {
     public struct Edge
     {
-        public Vector3I Target { get; set; }
-        public float Weight { get; set; }
+        public Vector3I Target;
+        public float Weight;
+
         public Edge(Vector3I target, float weight)
         {
             Target = target;
             Weight = weight;
         }
     }
+
     public class AdjacencyList
     {
         private Dictionary<Vector3I, List<Edge>> adjacencyList;
+        private List<Edge> emptyEdgeList; // Reusable empty list to avoid allocations
 
         public AdjacencyList()
         {
             adjacencyList = new Dictionary<Vector3I, List<Edge>>();
+            emptyEdgeList = new List<Edge>(0);
         }
 
         /// <summary>
@@ -35,15 +39,16 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         public void AddEdge(Vector3I from, Vector3I to, float cost)
         {
-            // Ensure the source node exists in the list
-            if (!adjacencyList.ContainsKey(from))
+            List<Edge> edges;
+            if (!adjacencyList.TryGetValue(from, out edges))
             {
-                adjacencyList[from] = new List<Edge>();
+                edges = new List<Edge>();
+                adjacencyList[from] = edges;
             }
 
-            // Add the edge
-            adjacencyList[from].Add(new Edge(to, cost));
+            edges.Add(new Edge(to, cost));
         }
+
         /// <summary>
         /// Add a bidirectional edge between two points
         /// </summary>
@@ -54,16 +59,17 @@ namespace ImprovedAI.Pathfinding
         }
 
         /// <summary>
-        /// Get all neighbors of a position
+        /// Get all neighbors of a position. Returns read-only list.
         /// </summary>
         public List<Edge> GetNeighbors(Vector3I position)
         {
-            if (adjacencyList.ContainsKey(position))
+            List<Edge> edges;
+            if (adjacencyList.TryGetValue(position, out edges))
             {
-                return adjacencyList[position];
+                return edges;
             }
 
-            return new List<Edge>(); // Return empty list if no connections
+            return emptyEdgeList; // Return cached empty list instead of allocating
         }
 
         /// <summary>
@@ -71,12 +77,13 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         public bool HasEdge(Vector3I from, Vector3I to)
         {
-            if (!adjacencyList.ContainsKey(from))
+            List<Edge> edges;
+            if (!adjacencyList.TryGetValue(from, out edges))
                 return false;
 
-            foreach (var edge in adjacencyList[from])
+            for (int i = 0; i < edges.Count; i++)
             {
-                if (edge.Target.Equals(to))
+                if (edges[i].Target.Equals(to))
                     return true;
             }
 
@@ -88,16 +95,42 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         public float GetEdgeCost(Vector3I from, Vector3I to)
         {
-            if (!adjacencyList.ContainsKey(from))
+            List<Edge> edges;
+            if (!adjacencyList.TryGetValue(from, out edges))
                 return float.PositiveInfinity;
 
-            foreach (var edge in adjacencyList[from])
+            for (int i = 0; i < edges.Count; i++)
             {
-                if (edge.Target.Equals(to))
-                    return edge.Weight;
+                if (edges[i].Target.Equals(to))
+                    return edges[i].Weight;
             }
 
             return float.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Get the cost of a direct edge, or infinity if no connection
+        /// </summary>
+        public bool TryGetEdgeCost(Vector3I from, Vector3I to, out float cost)
+        {
+            List<Edge> edges;
+            if (!adjacencyList.TryGetValue(from, out edges))
+            {
+                cost = float.PositiveInfinity;
+                return false;
+            }
+
+            for (int i = 0; i < edges.Count; i++)
+            {
+                if (edges[i].Target.Equals(to))
+                {
+                    cost = edges[i].Weight;
+                    return true;
+                }
+            }
+
+            cost = float.PositiveInfinity;
+            return false;
         }
 
         /// <summary>
@@ -105,13 +138,14 @@ namespace ImprovedAI.Pathfinding
         /// </summary>
         public void RemoveEdge(Vector3I from, Vector3I to)
         {
-            if (!adjacencyList.ContainsKey(from))
+            List<Edge> edges;
+            if (!adjacencyList.TryGetValue(from, out edges))
                 return;
 
-            adjacencyList[from].RemoveAll(e => e.Target.Equals(to));
+            edges.RemoveAll(e => e.Target.Equals(to));
 
             // Clean up empty lists
-            if (adjacencyList[from].Count == 0)
+            if (edges.Count == 0)
             {
                 adjacencyList.Remove(from);
             }
@@ -128,17 +162,17 @@ namespace ImprovedAI.Pathfinding
         /// <summary>
         /// Helper: Create a standard 6-directional grid in a region
         /// </summary>
-        public void CreateStandardGrid(Vector3I min, Vector3I max, float moveCost = 1.0f)
+        public void CreateStandardGrid(Vector3I min, Vector3I max, float moveCost)
         {
             // Six directions: +X, -X, +Y, -Y, +Z, -Z
             Vector3I[] directions = new Vector3I[]
             {
-            new Vector3I(1, 0, 0),   // Right
-            new Vector3I(-1, 0, 0),  // Left
-            new Vector3I(0, 1, 0),   // Up
-            new Vector3I(0, -1, 0),  // Down
-            new Vector3I(0, 0, 1),   // Forward
-            new Vector3I(0, 0, -1)   // Back
+                new Vector3I(1, 0, 0),   // Right
+                new Vector3I(-1, 0, 0),  // Left
+                new Vector3I(0, 1, 0),   // Up
+                new Vector3I(0, -1, 0),  // Down
+                new Vector3I(0, 0, 1),   // Forward
+                new Vector3I(0, 0, -1)   // Back
             };
 
             for (int x = min.X; x <= max.X; x++)
@@ -147,15 +181,15 @@ namespace ImprovedAI.Pathfinding
                 {
                     for (int z = min.Z; z <= max.Z; z++)
                     {
-                        var current = new Vector3I(x, y, z);
+                        Vector3I current = new Vector3I(x, y, z);
 
                         // Connect to all 6 adjacent cells
-                        foreach (var dir in directions)
+                        for (int d = 0; d < directions.Length; d++)
                         {
-                            var neighbor = new Vector3I(
-                                current.X + dir.X,
-                                current.Y + dir.Y,
-                                current.Z + dir.Z
+                            Vector3I neighbor = new Vector3I(
+                                current.X + directions[d].X,
+                                current.Y + directions[d].Y,
+                                current.Z + directions[d].Z
                             );
 
                             // Check if neighbor is within bounds

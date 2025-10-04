@@ -4,8 +4,6 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
@@ -15,29 +13,41 @@ namespace ImprovedAI.Pathfinding
 {
     public class AStarPathfinder : IPathfinder
     {
-        public PathfindingManager.Method Method => PathfindingManager.Method.AStar;
+        public PathfindingManager.Method Method
+        {
+            get { return PathfindingManager.Method.AStar; }
+        }
 
         private readonly IPathfindingConfig config;
         private readonly DirectPathfinder directFallback;
 
         // Pre-allocated data structures (reused across pathfinding operations)
-        private readonly Dictionary<Vector3I, AStarNode> openSet = new Dictionary<Vector3I, AStarNode>();
-        private readonly Dictionary<Vector3I, AStarNode> closedSet = new Dictionary<Vector3I, AStarNode>();
-        private readonly PriorityQueue<AStarNode> openQueue = new PriorityQueue<AStarNode>();
+        private readonly Dictionary<Vector3I, AStarNode> openSet;
+        private readonly Dictionary<Vector3I, AStarNode> closedSet;
+        private readonly PriorityQueue<AStarNode> openQueue;
 
         // Pre-allocated node pool to avoid allocations
-        private readonly AStarNode[] nodePool = new AStarNode[1000]; // Match MaxPathNodes
-        private int nodePoolIndex = 0;
+        private readonly AStarNode[] nodePool;
+        private int nodePoolIndex;
 
         // Reusable lists to avoid allocations
-        private readonly List<Vector3I> neighborList = new List<Vector3I>(26);
-        private readonly List<Vector3D> pathList = new List<Vector3D>();
-        private readonly List<MyEntity> entityList = new List<MyEntity>();
+        private readonly List<Vector3I> neighborList;
+        private readonly List<Vector3D> pathList;
+        private readonly List<MyEntity> entityList;
+        private readonly List<IMyCubeGrid> connectedGridsBuffer;
+
+        // Cached calculations
+        private Vector3D _tempWorldPos;
+        private Vector3D _tempDirection;
+        private Vector3D _tempGravityUp;
+        private Vector3D _tempNormalized;
+        private Vector3D _tempHalfSize;
+        private Vector3D _tempBoxMin;
+        private Vector3D _tempBoxMax;
+        private MatrixD _cachedWorldMatrix;
+        private MatrixD _cachedWorldMatrixTransposed;
 
         // Static pre-computed direction arrays for all 6 forward orientations
-        // Each array is pre-sorted by priority: Forward 9, Side 8, Backward 9
-
-        // Forward = +Z
         private static readonly Vector3I[] DIRECTIONS_FORWARD_Z = new Vector3I[26]
         {
             // Forward 9 (priority 1)
@@ -54,86 +64,66 @@ namespace ImprovedAI.Pathfinding
             new Vector3I(1,-1,-1), new Vector3I(0,-1,-1), new Vector3I(-1,-1,-1)
         };
 
-        // Forward = -Z
         private static readonly Vector3I[] DIRECTIONS_BACKWARD_Z = new Vector3I[26]
         {
-            // Forward 9 (priority 1)
             new Vector3I(1,1,-1), new Vector3I(0,1,-1), new Vector3I(-1,1,-1),
             new Vector3I(1,0,-1), new Vector3I(0,0,-1), new Vector3I(-1,0,-1),
             new Vector3I(1,-1,-1), new Vector3I(0,-1,-1), new Vector3I(-1,-1,-1),
-            // Side 8 (priority 2)
             new Vector3I(1,1,0), new Vector3I(0,1,0), new Vector3I(-1,1,0),
             new Vector3I(1,0,0), new Vector3I(-1,0,0),
             new Vector3I(1,-1,0), new Vector3I(0,-1,0), new Vector3I(-1,-1,0),
-            // Backward 9 (priority 3)
             new Vector3I(1,1,1), new Vector3I(0,1,1), new Vector3I(-1,1,1),
             new Vector3I(1,0,1), new Vector3I(0,0,1), new Vector3I(-1,0,1),
             new Vector3I(1,-1,1), new Vector3I(0,-1,1), new Vector3I(-1,-1,1)
         };
 
-        // Forward = +Y
         private static readonly Vector3I[] DIRECTIONS_FORWARD_Y = new Vector3I[26]
         {
-            // Forward 9 (priority 1)
             new Vector3I(1,1,1), new Vector3I(0,1,1), new Vector3I(-1,1,1),
             new Vector3I(1,1,0), new Vector3I(0,1,0), new Vector3I(-1,1,0),
             new Vector3I(1,1,-1), new Vector3I(0,1,-1), new Vector3I(-1,1,-1),
-            // Side 8 (priority 2)
             new Vector3I(1,0,1), new Vector3I(0,0,1), new Vector3I(-1,0,1),
             new Vector3I(1,0,0), new Vector3I(-1,0,0),
             new Vector3I(1,0,-1), new Vector3I(0,0,-1), new Vector3I(-1,0,-1),
-            // Backward 9 (priority 3)
             new Vector3I(1,-1,1), new Vector3I(0,-1,1), new Vector3I(-1,-1,1),
             new Vector3I(1,-1,0), new Vector3I(0,-1,0), new Vector3I(-1,-1,0),
             new Vector3I(1,-1,-1), new Vector3I(0,-1,-1), new Vector3I(-1,-1,-1)
         };
 
-        // Forward = -Y
         private static readonly Vector3I[] DIRECTIONS_BACKWARD_Y = new Vector3I[26]
         {
-            // Forward 9 (priority 1)
             new Vector3I(1,-1,1), new Vector3I(0,-1,1), new Vector3I(-1,-1,1),
             new Vector3I(1,-1,0), new Vector3I(0,-1,0), new Vector3I(-1,-1,0),
             new Vector3I(1,-1,-1), new Vector3I(0,-1,-1), new Vector3I(-1,-1,-1),
-            // Side 8 (priority 2)
             new Vector3I(1,0,1), new Vector3I(0,0,1), new Vector3I(-1,0,1),
             new Vector3I(1,0,0), new Vector3I(-1,0,0),
             new Vector3I(1,0,-1), new Vector3I(0,0,-1), new Vector3I(-1,0,-1),
-            // Backward 9 (priority 3)
             new Vector3I(1,1,1), new Vector3I(0,1,1), new Vector3I(-1,1,1),
             new Vector3I(1,1,0), new Vector3I(0,1,0), new Vector3I(-1,1,0),
             new Vector3I(1,1,-1), new Vector3I(0,1,-1), new Vector3I(-1,1,-1)
         };
 
-        // Forward = +X
         private static readonly Vector3I[] DIRECTIONS_FORWARD_X = new Vector3I[26]
         {
-            // Forward 9 (priority 1)
             new Vector3I(1,1,1), new Vector3I(1,0,1), new Vector3I(1,-1,1),
             new Vector3I(1,1,0), new Vector3I(1,0,0), new Vector3I(1,-1,0),
             new Vector3I(1,1,-1), new Vector3I(1,0,-1), new Vector3I(1,-1,-1),
-            // Side 8 (priority 2)
             new Vector3I(0,1,1), new Vector3I(0,0,1), new Vector3I(0,-1,1),
             new Vector3I(0,1,0), new Vector3I(0,-1,0),
             new Vector3I(0,1,-1), new Vector3I(0,0,-1), new Vector3I(0,-1,-1),
-            // Backward 9 (priority 3)
             new Vector3I(-1,1,1), new Vector3I(-1,0,1), new Vector3I(-1,-1,1),
             new Vector3I(-1,1,0), new Vector3I(-1,0,0), new Vector3I(-1,-1,0),
             new Vector3I(-1,1,-1), new Vector3I(-1,0,-1), new Vector3I(-1,-1,-1)
         };
 
-        // Forward = -X
         private static readonly Vector3I[] DIRECTIONS_BACKWARD_X = new Vector3I[26]
         {
-            // Forward 9 (priority 1)
             new Vector3I(-1,1,1), new Vector3I(-1,0,1), new Vector3I(-1,-1,1),
             new Vector3I(-1,1,0), new Vector3I(-1,0,0), new Vector3I(-1,-1,0),
             new Vector3I(-1,1,-1), new Vector3I(-1,0,-1), new Vector3I(-1,-1,-1),
-            // Side 8 (priority 2)
             new Vector3I(0,1,1), new Vector3I(0,0,1), new Vector3I(0,-1,1),
             new Vector3I(0,1,0), new Vector3I(0,-1,0),
             new Vector3I(0,1,-1), new Vector3I(0,0,-1), new Vector3I(0,-1,-1),
-            // Backward 9 (priority 3)
             new Vector3I(1,1,1), new Vector3I(1,0,1), new Vector3I(1,-1,1),
             new Vector3I(1,1,0), new Vector3I(1,0,0), new Vector3I(1,-1,0),
             new Vector3I(1,1,-1), new Vector3I(1,0,-1), new Vector3I(1,-1,-1)
@@ -144,159 +134,162 @@ namespace ImprovedAI.Pathfinding
             config = IAISession.Instance?.GetConfig()?.Pathfinding;
             directFallback = new DirectPathfinder();
 
-            // Pre-allocate node pool
+            openSet = new Dictionary<Vector3I, AStarNode>();
+            closedSet = new Dictionary<Vector3I, AStarNode>();
+            openQueue = new PriorityQueue<AStarNode>();
+            nodePool = new AStarNode[1000];
+            nodePoolIndex = 0;
+            neighborList = new List<Vector3I>(26);
+            pathList = new List<Vector3D>();
+            entityList = new List<MyEntity>(10);
+            connectedGridsBuffer = new List<IMyCubeGrid>(10);
+
             for (int i = 0; i < nodePool.Length; i++)
             {
                 nodePool[i] = new AStarNode();
             }
         }
+
         public AStarPathfinder(IPathfindingConfig pathfindingConfig)
         {
             config = pathfindingConfig;
-            directFallback = new DirectPathfinder();
+            directFallback = new DirectPathfinder(pathfindingConfig);
 
-            // Pre-allocate node pool
+            openSet = new Dictionary<Vector3I, AStarNode>();
+            closedSet = new Dictionary<Vector3I, AStarNode>();
+            openQueue = new PriorityQueue<AStarNode>();
+            nodePool = new AStarNode[1000];
+            nodePoolIndex = 0;
+            neighborList = new List<Vector3I>(26);
+            pathList = new List<Vector3D>();
+            entityList = new List<MyEntity>(10);
+            connectedGridsBuffer = new List<IMyCubeGrid>(10);
+
             for (int i = 0; i < nodePool.Length; i++)
             {
                 nodePool[i] = new AStarNode();
             }
         }
 
-        public bool IsAvailable(PathfindingContext context)
+        public bool IsAvailable(ref PathfindingContext context)
         {
-            if (config?.AllowAStar() != true)
+            if (config == null || !config.AllowAStar())
                 return false;
 
-            // A* requires either sensors or cameras for obstacle detection
             bool hasSensors = config.RequireSensorsForPathfinding() &&
-                             context.SensorInfos?.Count > 0;
+                             context.SensorInfos != null && context.SensorInfos.Count > 0;
             bool hasCameras = config.RequireCamerasForPathfinding() &&
-                             context.CamerasByDirection?.Count > 0;
+                             context.CamerasByDirection != null && context.CamerasByDirection.Count > 0;
 
             return hasSensors || hasCameras;
         }
 
-        public int EstimatedComplexity(Vector3D start, Vector3D end)
+        public int EstimatedComplexity(ref Vector3D start, ref Vector3D end)
         {
-            var distance = Vector3D.Distance(start, end);
-
-            // Adaptive grid spacing based on distance
-            double gridSpacing;
-
-            if (distance < 100.0) // Short distance
-            {
-                gridSpacing = config.MinWaypointDistance();
-            }
-            else if (distance < 500.0) // Medium distance
-            {
-                // Lerp between min and mid-range spacing
-                gridSpacing = MathHelper.Lerp(
-                    (float)config.MinWaypointDistance(),
-                    (float)((config.MinWaypointDistance() + config.MaxWaypointDistance()) * 0.5),
-                    (float)((distance - 100.0) / 400.0)
-                );
-            }
-            else if (distance < 2000.0) // Long distance
-            {
-                // Lerp between mid-range and max spacing
-                gridSpacing = MathHelper.Lerp(
-                    (float)((config.MinWaypointDistance() + config.MaxWaypointDistance()) * 0.5),
-                    (float)config.MaxWaypointDistance(),
-                    (float)((distance - 500.0) / 1500.0)
-                );
-            }
-            else // Very long distance
-            {
-                gridSpacing = config.MaxWaypointDistance();
-            }
-
-            // Estimate nodes (multiply by 1.5 for non-straight paths)
-            var estimatedNodes = (int)((distance / gridSpacing) * 1.5);
+            double distance = Vector3D.Distance(start, end);
+            double gridSpacing = CalculateOptimalGridSpacing(distance);
+            int estimatedNodes = (int)((distance / gridSpacing) * 1.5);
             return Math.Min(estimatedNodes, config.MaxPathNodes());
         }
 
-        /// <summary>
-        /// Get the next waypoint dynamically using A* search
-        /// </summary>
-        public Vector3D? GetNextWaypoint(Vector3D currentPosition, Vector3D targetPosition, PathfindingContext context)
+        public bool GetNextWaypoint(ref PathfindingContext context, ref Vector3D currentPosition,
+            ref Vector3D targetPosition, out Vector3D result)
         {
+            result = default(Vector3D);
+
             if (config == null)
             {
                 Log.Error("AStarPathfinder: Config not loaded");
-                return null;
+                return false;
             }
 
-            var distance = Vector3D.Distance(currentPosition, targetPosition);
+            double distance = Vector3D.Distance(currentPosition, targetPosition);
 
             // For very short distances, use direct pathfinding
             if (distance < context.WaypointDistance * 2)
             {
-                return directFallback.GetNextWaypoint(currentPosition, targetPosition, context);
+                return directFallback.GetNextWaypoint(ref context, ref currentPosition,
+                    ref targetPosition, out result);
+            }
+
+            // Cache world matrix
+            if (context.Controller != null)
+            {
+                _cachedWorldMatrix = context.Controller.WorldMatrix;
+                MatrixD.Transpose(ref _cachedWorldMatrix, out _cachedWorldMatrixTransposed);
             }
 
             // Try to find a path using A*
-            var path = FindPath(currentPosition, targetPosition, context);
-
-            if (path != null && path.Count > 1)
+            if (FindPath(ref currentPosition, ref targetPosition, ref context, pathList))
             {
-                // Return the first waypoint in the path (after current position)
-                return path[1];
+                if (pathList.Count > 1)
+                {
+                    result = pathList[1];
+                    return true;
+                }
             }
 
             // A* failed, fallback to direct pathfinding if repathing is allowed
             if (config.AllowRepathing())
             {
                 Log.Warning("AStarPathfinder: Failed to find path, falling back to direct pathfinding");
-                return directFallback.GetNextWaypoint(currentPosition, targetPosition, context);
+                return directFallback.GetNextWaypoint(ref context, ref currentPosition,
+                    ref targetPosition, out result);
             }
 
             Log.Warning("AStarPathfinder: Failed to find path and repathing disabled");
-            return null;
+            return false;
         }
 
-        /// <summary>
-        /// Generate complete path using A* algorithm
-        /// </summary>
-        public List<Vector3D> CalculatePath(Vector3D start, Vector3D end, PathfindingContext context)
+        public bool CalculatePath(ref PathfindingContext context, ref Vector3D start, ref Vector3D end,
+            List<Vector3D> pathWaypoints)
         {
+            if (pathWaypoints == null)
+                throw new ArgumentNullException("pathWaypoints");
+
             if (config == null)
             {
                 Log.Error("AStarPathfinder: Config not loaded");
-                return new List<Vector3D> { start, end };
+                pathWaypoints.Clear();
+                pathWaypoints.Add(start);
+                pathWaypoints.Add(end);
+                return false;
             }
 
-            var path = FindPath(start, end, context);
-
-            if (path != null && path.Count > 0)
+            // Cache world matrix
+            if (context.Controller != null)
             {
-                return path;
+                _cachedWorldMatrix = context.Controller.WorldMatrix;
+                MatrixD.Transpose(ref _cachedWorldMatrix, out _cachedWorldMatrixTransposed);
+            }
+
+            if (FindPath(ref start, ref end, ref context, pathWaypoints))
+            {
+                return true;
             }
 
             // Fallback to direct pathfinding
             if (config.AllowRepathing())
             {
                 Log.Warning("AStarPathfinder: A* failed, using direct pathfinding fallback");
-                return directFallback.CalculatePath(start, end, context);
+                return directFallback.CalculatePath(ref context, ref start, ref end, pathWaypoints);
             }
 
             Log.Error("AStarPathfinder: Failed to find path and repathing disabled");
-            return new List<Vector3D>();
+            pathWaypoints.Clear();
+            return false;
         }
 
-        /// <summary>
-        /// Core A* pathfinding algorithm with deadlock detection and retracing
-        /// </summary>
-        private List<Vector3D> FindPath(Vector3D start, Vector3D end, PathfindingContext context)
+        private bool FindPath(ref Vector3D start, ref Vector3D end, ref PathfindingContext context,
+            List<Vector3D> outputPath)
         {
-            var startTime = DateTime.UtcNow;
+            DateTime startTime = DateTime.UtcNow;
 
-            // Determine grid spacing based on distance
-            var distance = Vector3D.Distance(start, end);
-            var gridSpacing = CalculateOptimalGridSpacing(distance);
+            double distance = Vector3D.Distance(start, end);
+            double gridSpacing = CalculateOptimalGridSpacing(distance);
 
-            // Convert to grid coordinates for discrete space
-            var gridStart = WorldToGrid(start, gridSpacing);
-            var gridEnd = WorldToGrid(end, gridSpacing);
+            Vector3I gridStart = WorldToGrid(ref start, gridSpacing);
+            Vector3I gridEnd = WorldToGrid(ref end, gridSpacing);
 
             // Clear reusable data structures
             openSet.Clear();
@@ -304,20 +297,18 @@ namespace ImprovedAI.Pathfinding
             openQueue.Clear();
             nodePoolIndex = 0;
 
-            // Determine forward direction once for this pathfinding operation
-            var forwardDirections = SelectDirectionArray(context);
+            Vector3I[] forwardDirections = SelectDirectionArray(ref context);
 
-            // Get start node from pool
-            var startNode = GetNodeFromPool();
+            AStarNode startNode = GetNodeFromPool();
             if (startNode == null)
             {
                 Log.Error("AStarPathfinder: Node pool exhausted at start");
-                return null;
+                return false;
             }
 
             startNode.Position = gridStart;
             startNode.GCost = 0;
-            startNode.HCost = Heuristic(gridStart, gridEnd, context);
+            startNode.HCost = Heuristic(ref gridStart, ref gridEnd, ref context, gridSpacing);
             startNode.Parent = null;
 
             openSet[gridStart] = startNode;
@@ -325,37 +316,35 @@ namespace ImprovedAI.Pathfinding
 
             int nodesExplored = 0;
             int stuckCounter = 0;
-            Vector3I? lastPosition = null;
+            Vector3I lastPosition = default(Vector3I);
+            bool hasLastPosition = false;
 
             while (openQueue.Count > 0)
             {
-                // Check timeout
                 if ((DateTime.UtcNow - startTime) > config.MaxPathfindingTime())
                 {
                     Log.Warning("AStarPathfinder: Timeout after exploring {0} nodes", nodesExplored);
-                    return null;
+                    return false;
                 }
 
-                // Check node limit
                 if (nodesExplored >= config.MaxPathNodes())
                 {
                     Log.Warning("AStarPathfinder: Max nodes reached ({0})", config.MaxPathNodes());
-                    return null;
+                    return false;
                 }
 
-                // Get node with lowest F cost
-                var current = openQueue.Dequeue();
+                AStarNode current = openQueue.Dequeue();
                 openSet.Remove(current.Position);
                 closedSet[current.Position] = current;
                 nodesExplored++;
 
-                // Deadlock detection: Check if we're stuck exploring the same area
-                if (lastPosition.HasValue && Vector3.Distance(current.Position, lastPosition.Value) < 2)
+                // Deadlock detection
+                if (hasLastPosition && Vector3.Distance(current.Position, lastPosition) < 2)
                 {
                     stuckCounter++;
                     if (stuckCounter > 10)
                     {
-                        Log.Verbose("AStarPathfinder: Possible deadlock detected, allowing backward exploration");
+                        Log.Verbose("AStarPathfinder: Possible deadlock detected");
                         stuckCounter = 0;
                     }
                 }
@@ -364,40 +353,38 @@ namespace ImprovedAI.Pathfinding
                     stuckCounter = 0;
                 }
                 lastPosition = current.Position;
+                hasLastPosition = true;
 
-                // Check if we reached the goal
                 if (Vector3.Distance(current.Position, gridEnd) <= 1)
                 {
                     Log.Info("AStarPathfinder: Found path with {0} nodes in {1:F1}ms",
                         nodesExplored, (DateTime.UtcNow - startTime).TotalMilliseconds);
-                    return ReconstructPath(current, gridSpacing);
+                    ReconstructPath(current, gridSpacing, outputPath);
+                    return true;
                 }
 
-                // Explore neighbors
                 GetNeighbors(current.Position, forwardDirections);
 
                 for (int i = 0; i < neighborList.Count; i++)
                 {
-                    var neighbor = neighborList[i];
+                    Vector3I neighbor = neighborList[i];
 
-                    // Skip if already explored
                     if (closedSet.ContainsKey(neighbor))
                     {
-                        // Only allow revisiting if we're stuck and repathing is enabled
                         if (!config.AllowRepathing() || stuckCounter < 5)
                             continue;
 
                         closedSet.Remove(neighbor);
-                        Log.Verbose("AStarPathfinder: Retracing to position {0} due to deadlock", neighbor);
+                        Log.Verbose("AStarPathfinder: Retracing to position {0}", neighbor);
                     }
 
-                    var neighborWorld = GridToWorld(neighbor, gridSpacing);
+                    GridToWorld(ref neighbor, gridSpacing, out _tempWorldPos);
 
-                    // Check if neighbor is traversable
-                    if (!IsTraversable(neighborWorld, context))
+                    if (!IsTraversable(ref _tempWorldPos, ref context))
                         continue;
 
-                    var tentativeGCost = current.GCost + GetMovementCost(current.Position, neighbor, context, forwardDirections);
+                    float tentativeGCost = current.GCost +
+                        GetMovementCost(ref current.Position, ref neighbor, ref context, forwardDirections, gridSpacing);
 
                     AStarNode neighborNode;
                     if (!openSet.TryGetValue(neighbor, out neighborNode))
@@ -411,12 +398,11 @@ namespace ImprovedAI.Pathfinding
 
                         neighborNode.Position = neighbor;
                         neighborNode.GCost = float.MaxValue;
-                        neighborNode.HCost = Heuristic(neighbor, gridEnd, context);
+                        neighborNode.HCost = Heuristic(ref neighbor, ref gridEnd, ref context, gridSpacing);
                         neighborNode.Parent = null;
                         openSet[neighbor] = neighborNode;
                     }
 
-                    // If this path to neighbor is better
                     if (tentativeGCost < neighborNode.GCost)
                     {
                         neighborNode.GCost = tentativeGCost;
@@ -431,27 +417,23 @@ namespace ImprovedAI.Pathfinding
             }
 
             Log.Warning("AStarPathfinder: No path found after exploring {0} nodes", nodesExplored);
-            return null;
+            return false;
         }
 
-        /// <summary>
-        /// Calculate optimal grid spacing based on distance
-        /// </summary>
         private double CalculateOptimalGridSpacing(double distance)
         {
             if (distance < 100.0)
                 return config.MinWaypointDistance();
             else if (distance < 500.0)
-                return MathHelper.Lerp((float)config.MinWaypointDistance(), (float)config.MaxWaypointDistance() * 0.5f, (float)((distance - 100.0) / 400.0));
+                return MathHelper.Lerp((float)config.MinWaypointDistance(),
+                    (float)config.MaxWaypointDistance() * 0.5f, (float)((distance - 100.0) / 400.0));
             else if (distance < 2000.0)
-                return MathHelper.Lerp((float)config.MaxWaypointDistance() * 0.5f, (float)    config.MaxWaypointDistance(), (float)((distance - 500.0) / 1500.0));
+                return MathHelper.Lerp((float)config.MaxWaypointDistance() * 0.5f,
+                    (float)config.MaxWaypointDistance(), (float)((distance - 500.0) / 1500.0));
             else
                 return config.MaxWaypointDistance();
         }
 
-        /// <summary>
-        /// Get node from pre-allocated pool
-        /// </summary>
         private AStarNode GetNodeFromPool()
         {
             if (nodePoolIndex >= nodePool.Length)
@@ -460,28 +442,21 @@ namespace ImprovedAI.Pathfinding
             return nodePool[nodePoolIndex++];
         }
 
-        /// <summary>
-        /// Select the appropriate pre-computed direction array based on forward direction
-        /// </summary>
-        private Vector3I[] SelectDirectionArray(PathfindingContext context)
+        private Vector3I[] SelectDirectionArray(ref PathfindingContext context)
         {
-            var controllerForward = context.GetControllerForwardInWorld();
-            var localForward = Vector3D.TransformNormal(controllerForward,
-                MatrixD.Transpose(context.Controller.WorldMatrix));
+            context.GetControllerForwardInWorld(ref _cachedWorldMatrix, out _tempDirection);
+            Vector3D.TransformNormal(ref _tempDirection, ref _cachedWorldMatrixTransposed, out _tempDirection);
 
-            var absForward = Vector3D.Abs(localForward);
+            Vector3D absForward = Vector3D.Abs(_tempDirection);
 
             if (absForward.Z > absForward.X && absForward.Z > absForward.Y)
-                return localForward.Z > 0 ? DIRECTIONS_FORWARD_Z : DIRECTIONS_BACKWARD_Z;
+                return _tempDirection.Z > 0 ? DIRECTIONS_FORWARD_Z : DIRECTIONS_BACKWARD_Z;
             else if (absForward.Y > absForward.X)
-                return localForward.Y > 0 ? DIRECTIONS_FORWARD_Y : DIRECTIONS_BACKWARD_Y;
+                return _tempDirection.Y > 0 ? DIRECTIONS_FORWARD_Y : DIRECTIONS_BACKWARD_Y;
             else
-                return localForward.X > 0 ? DIRECTIONS_FORWARD_X : DIRECTIONS_BACKWARD_X;
+                return _tempDirection.X > 0 ? DIRECTIONS_FORWARD_X : DIRECTIONS_BACKWARD_X;
         }
 
-        /// <summary>
-        /// Get neighboring grid positions using pre-computed direction array (zero allocations)
-        /// </summary>
         private void GetNeighbors(Vector3I position, Vector3I[] directions)
         {
             neighborList.Clear();
@@ -492,25 +467,23 @@ namespace ImprovedAI.Pathfinding
             }
         }
 
-        /// <summary>
-        /// Heuristic function for A* (estimated cost from current to goal)
-        /// </summary>
-        private float Heuristic(Vector3I from, Vector3I to, PathfindingContext context)
+        private float Heuristic(ref Vector3I from, ref Vector3I to, ref PathfindingContext context,
+            double gridSpacing)
         {
-            var distance = Vector3.Distance(from, to);
+            float distance = Vector3.Distance(from, to);
 
-            // Add penalty for moving against gravity if in planet gravity
             if (context.IsInPlanetGravity() && context.PlanetCenter.HasValue)
             {
-                var fromWorld = GridToWorld(from, config.MinWaypointDistance());
-                var toWorld = GridToWorld(to, config.MinWaypointDistance());
+                GridToWorld(ref from, gridSpacing, out _tempWorldPos);
+                Vector3D toWorld;
+                GridToWorld(ref to, gridSpacing, out toWorld);
 
-                var fromRadius = Vector3D.Distance(fromWorld, context.PlanetCenter.Value);
-                var toRadius = Vector3D.Distance(toWorld, context.PlanetCenter.Value);
+                double fromRadius = Vector3D.Distance(_tempWorldPos, context.PlanetCenter.Value);
+                double toRadius = Vector3D.Distance(toWorld, context.PlanetCenter.Value);
 
                 if (toRadius > fromRadius)
                 {
-                    var climbDistance = toRadius - fromRadius;
+                    double climbDistance = toRadius - fromRadius;
                     distance += (float)(climbDistance * 0.5);
                 }
             }
@@ -518,54 +491,48 @@ namespace ImprovedAI.Pathfinding
             return distance;
         }
 
-        /// <summary>
-        /// Get actual movement cost between two adjacent grid positions
-        /// </summary>
-        private float GetMovementCost(Vector3I from, Vector3I to, PathfindingContext context, Vector3I[] directions)
+        private float GetMovementCost(ref Vector3I from, ref Vector3I to, ref PathfindingContext context,
+            Vector3I[] directions, double gridSpacing)
         {
-            var fromWorld = GridToWorld(from, config.MinWaypointDistance());
-            var toWorld = GridToWorld(to, config.MinWaypointDistance());
+            GridToWorld(ref from, gridSpacing, out _tempWorldPos);
+            Vector3D toWorld;
+            GridToWorld(ref to, gridSpacing, out toWorld);
 
-            var distance = Vector3D.Distance(fromWorld, toWorld);
-            var movementCost = (float)distance;
+            double distance = Vector3D.Distance(_tempWorldPos, toWorld);
+            float movementCost = (float)distance;
 
-            // Calculate direction priority for cost adjustment
-            var direction = to - from;
+            Vector3I direction = to - from;
 
-            // Find this direction in our array to determine priority
-            int priorityZone = 3; // Default to backward
+            int priorityZone = 3;
             for (int i = 0; i < 26; i++)
             {
                 if (directions[i] == direction)
                 {
-                    if (i < 9) priorityZone = 1; // Forward
-                    else if (i < 17) priorityZone = 2; // Side
-                    else priorityZone = 3; // Backward
+                    if (i < 9) priorityZone = 1;
+                    else if (i < 17) priorityZone = 2;
+                    else priorityZone = 3;
                     break;
                 }
             }
 
-            // Apply cost penalty based on priority zone
             if (priorityZone == 3)
-                movementCost *= 1.5f; // 50% penalty for backward
+                movementCost *= 1.5f;
             else if (priorityZone == 2)
-                movementCost *= 1.1f; // 10% penalty for sideways
+                movementCost *= 1.1f;
 
-            // Add cost for moving against gravity
-            if (context.GravityVector.LengthSquared() > 0.1)
+            double gravityLengthSq = context.GravityVector.LengthSquared();
+            if (gravityLengthSq > 0.1)
             {
-                var worldDirection = toWorld - fromWorld;
-                var gravityUp = Vector3D.Normalize(-context.GravityVector);
-                var climbFactor = Vector3D.Dot(Vector3D.Normalize(worldDirection), gravityUp);
+                Vector3D.Subtract(ref toWorld, ref _tempWorldPos, out _tempDirection);
+                Vector3D.Negate(ref context.GravityVector, out _tempGravityUp);
+                Vector3D.Normalize(ref _tempGravityUp, out _tempGravityUp);
+                Vector3D.Normalize(ref _tempDirection, out _tempNormalized);
 
-                var worldMatrix = context.Controller.WorldMatrix;
-                MatrixD worldMatrixTransposed;
-                MatrixD.Transpose(ref worldMatrix, out worldMatrixTransposed);
-
+                double climbFactor = Vector3D.Dot(_tempNormalized, _tempGravityUp);
 
                 if (climbFactor > 0)
                 {
-                    if (!context.CanClimbInDirection(ref worldDirection, ref worldMatrixTransposed))
+                    if (!context.CanClimbInDirection(ref _tempDirection, ref _cachedWorldMatrixTransposed))
                     {
                         movementCost += 1000.0f;
                     }
@@ -576,8 +543,7 @@ namespace ImprovedAI.Pathfinding
                 }
             }
 
-            // Add cost for diagonal movement
-            var axisCount = 0;
+            int axisCount = 0;
             if (direction.X != 0) axisCount++;
             if (direction.Y != 0) axisCount++;
             if (direction.Z != 0) axisCount++;
@@ -590,25 +556,22 @@ namespace ImprovedAI.Pathfinding
             return movementCost;
         }
 
-        /// <summary>
-        /// Check if a position is traversable (no obstacles)
-        /// </summary>
-        private bool IsTraversable(Vector3D position, PathfindingContext context)
+        private bool IsTraversable(ref Vector3D position, ref PathfindingContext context)
         {
-            // Check altitude if in gravity
-            if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity() && context.PlanetCenter.HasValue)
+            if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity() &&
+                context.PlanetCenter.HasValue)
             {
-                var altitude = Vector3D.Distance(position, context.PlanetCenter.Value) - context.PlanetRadius;
+                double altitude = Vector3D.Distance(position, context.PlanetCenter.Value) - context.PlanetRadius;
                 if (altitude < config.MinAltitudeBuffer())
                 {
                     return false;
                 }
             }
 
-            // Check for obstacles using sensors
-            if (config.RequireSensorsForPathfinding() && context.SensorInfos?.Count > 0)
+            if (config.RequireSensorsForPathfinding() &&
+                context.SensorInfos != null && context.SensorInfos.Count > 0)
             {
-                if (HasObstacleAtPosition(position, context))
+                if (HasObstacleAtPosition(ref position, ref context))
                 {
                     return false;
                 }
@@ -617,28 +580,31 @@ namespace ImprovedAI.Pathfinding
             return true;
         }
 
-        /// <summary>
-        /// Check if there's an obstacle at a specific position using sensor detection
-        /// </summary>
-        private bool HasObstacleAtPosition(Vector3D position, PathfindingContext context)
+        private bool HasObstacleAtPosition(ref Vector3D position, ref PathfindingContext context)
         {
-            foreach (var sensorInfo in context.SensorInfos)
+            for (int s = 0; s < context.SensorInfos.Count; s++)
             {
-                var distanceToSensor = Vector3D.Distance(position, sensorInfo.Position);
+                PathfindingContext.SensorInfo sensorInfo = context.SensorInfos[s];
+                double distanceToSensor = Vector3D.Distance(position, sensorInfo.Position);
                 if (distanceToSensor > sensorInfo.MaxRange)
                     continue;
 
-                var halfSize = new Vector3D(config.MinWaypointDistance() * 0.5);
-                var box = new BoundingBoxD(position - halfSize, position + halfSize);
+                double halfSize = config.MinWaypointDistance() * 0.5;
+                _tempHalfSize = new Vector3D(halfSize, halfSize, halfSize);
+
+                Vector3D.Subtract(ref position, ref _tempHalfSize, out _tempBoxMin);
+                Vector3D.Add(ref position, ref _tempHalfSize, out _tempBoxMax);
+
+                BoundingBoxD box = new BoundingBoxD(_tempBoxMin, _tempBoxMax);
 
                 entityList.Clear();
                 try
                 {
                     MyGamePruningStructure.GetTopmostEntitiesInBox(ref box, entityList);
 
-                    foreach (var entity in entityList)
+                    for (int i = 0; i < entityList.Count; i++)
                     {
-                        if (IsObstacleEntity(entity, context))
+                        if (IsObstacleEntity(entityList[i], ref context))
                         {
                             return true;
                         }
@@ -653,24 +619,24 @@ namespace ImprovedAI.Pathfinding
             return false;
         }
 
-        /// <summary>
-        /// Determine if an entity is an obstacle
-        /// </summary>
-        private bool IsObstacleEntity(IMyEntity entity, PathfindingContext context)
+        private bool IsObstacleEntity(IMyEntity entity, ref PathfindingContext context)
         {
             if (entity == null) return false;
+            if (context.CubeGrid != null && entity.EntityId == context.CubeGrid.EntityId) return false;
 
-            if (entity.EntityId == context.CubeGrid?.EntityId) return false;
-
-            var grid = entity as IMyCubeGrid;
+            IMyCubeGrid grid = entity as IMyCubeGrid;
             if (grid != null)
             {
-                var connectedGrids = new List<IMyCubeGrid>();
-                MyAPIGateway.GridGroups.GetGroup(context.CubeGrid, GridLinkTypeEnum.Mechanical, connectedGrids);
-
-                if (connectedGrids.Contains(grid))
+                if (context.CubeGrid != null)
                 {
-                    return false;
+                    connectedGridsBuffer.Clear();
+                    MyAPIGateway.GridGroups.GetGroup(context.CubeGrid, GridLinkTypeEnum.Mechanical,
+                        connectedGridsBuffer);
+
+                    if (connectedGridsBuffer.Contains(grid))
+                    {
+                        return false;
+                    }
                 }
 
                 return true;
@@ -682,28 +648,22 @@ namespace ImprovedAI.Pathfinding
             return false;
         }
 
-        /// <summary>
-        /// Reconstruct the path from the goal node back to start (reuses pathList)
-        /// </summary>
-        private List<Vector3D> ReconstructPath(AStarNode goalNode, double waypointDistance)
+        private void ReconstructPath(AStarNode goalNode, double waypointDistance, List<Vector3D> outputPath)
         {
-            pathList.Clear();
-            var current = goalNode;
+            outputPath.Clear();
+            AStarNode current = goalNode;
 
             while (current != null)
             {
-                pathList.Add(GridToWorld(current.Position, waypointDistance));
+                GridToWorld(ref current.Position, waypointDistance, out _tempWorldPos);
+                outputPath.Add(_tempWorldPos);
                 current = current.Parent;
             }
 
-            pathList.Reverse();
-            return pathList;
+            outputPath.Reverse();
         }
 
-        /// <summary>
-        /// Convert world position to grid coordinates
-        /// </summary>
-        private Vector3I WorldToGrid(Vector3D world, double gridSize)
+        private Vector3I WorldToGrid(ref Vector3D world, double gridSize)
         {
             return new Vector3I(
                 (int)Math.Round(world.X / gridSize),
@@ -712,44 +672,36 @@ namespace ImprovedAI.Pathfinding
             );
         }
 
-        /// <summary>
-        /// Convert grid coordinates to world position
-        /// </summary>
-        private Vector3D GridToWorld(Vector3I grid, double gridSize)
+        private void GridToWorld(ref Vector3I grid, double gridSize, out Vector3D result)
         {
-            return new Vector3D(
+            result = new Vector3D(
                 grid.X * gridSize,
                 grid.Y * gridSize,
                 grid.Z * gridSize
             );
         }
 
-        /// <summary>
-        /// A* node class
-        /// </summary>
         private class AStarNode : IComparable<AStarNode>
         {
-            public Vector3I Position { get; set; }
-            public float GCost { get; set; }
-            public float HCost { get; set; }
-            public float FCost => GCost + HCost;
-            public AStarNode Parent { get; set; }
+            public Vector3I Position;
+            public float GCost;
+            public float HCost;
+            public float FCost { get { return GCost + HCost; } }
+            public AStarNode Parent;
+
             public int CompareTo(AStarNode other)
             {
                 return FCost.CompareTo(other.FCost);
             }
         }
 
-        /// <summary>
-        /// Simple priority queue for A* open set (optimized min-heap)
-        /// </summary>
         private class PriorityQueue<T> where T : IComparable<T>
         {
             private List<T> data;
 
             public PriorityQueue()
             {
-                data = new List<T>(200); // Pre-allocate for typical use
+                data = new List<T>(200);
             }
 
             public void Enqueue(T item)
@@ -794,7 +746,10 @@ namespace ImprovedAI.Pathfinding
                 return frontItem;
             }
 
-            public int Count => data.Count;
+            public int Count
+            {
+                get { return data.Count; }
+            }
 
             public bool Contains(T item)
             {

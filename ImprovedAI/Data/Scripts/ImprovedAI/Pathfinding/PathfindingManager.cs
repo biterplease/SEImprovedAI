@@ -22,34 +22,45 @@ namespace ImprovedAI.Pathfinding
         public enum Method
         {
             None = 0,
-            DirectPathfinding = 1,           // Cheapest - straight line
-            AStar = 2,               // A* pathfinding
-            DStarLite = 4 // added later
+            DirectPathfinding = 1,
+            AStar = 2,
+            DStarLite = 4
         }
+
         private readonly IPathfindingConfig config;
         private readonly IPathfinder directPathfinder;
         private readonly IPathfinder astarPathfinder;
-
         private readonly IMyGamePruningStructureDelegate pruningStructure;
         private readonly IMyPlanetDelegate planetDelegate;
-
-        // Adjacency list for caching traveled paths and enabling efficient repathing
         private readonly AdjacencyList traveledGraph;
+        private Base6Directions.Direction controllerForwardDirection;
 
-        // Current active pathfinding state
-        Base6Directions.Direction controllerForwardDirection;
+        // Reusable buffers to avoid allocations
+        private List<MyLineSegmentOverlapResult<MyEntity>> _raycastResults;
+        private List<Vector3D> _nearbyNodesBuffer;
+        private List<IMyCubeGrid> _connectedGridsBuffer;
+
+        // Cache for temporary calculations
+        private Vector3D _tempDirection;
+        private Vector3D _tempOffset;
+
         public PathfindingManager(
-            Base6Directions.Direction controllerFwdDirection,
             PathfindingConfig pathfindingConfig,
+            Base6Directions.Direction controllerFwdDirection = Base6Directions.Direction.Forward,
             IMyGamePruningStructureDelegate pruningStructure = null,
             IMyPlanetDelegate planetDelegate = null
         )
         {
-            config = IAISession.Instance?.GetConfig()?.Pathfinding;
+            config = pathfindingConfig ?? IAISession.Instance?.GetConfig()?.Pathfinding;
             traveledGraph = new AdjacencyList();
             controllerForwardDirection = controllerFwdDirection;
             this.pruningStructure = pruningStructure ?? new MyGamePruningStructureDelegate();
             this.planetDelegate = planetDelegate ?? new MyPlanetDelegate();
+
+            // Initialize reusable buffers
+            _raycastResults = new List<MyLineSegmentOverlapResult<MyEntity>>(10);
+            _nearbyNodesBuffer = new List<Vector3D>(20);
+            _connectedGridsBuffer = new List<IMyCubeGrid>(10);
 
             // Initialize available pathfinders
             directPathfinder = config?.AllowDirectPathfinding() == true ? new DirectPathfinder() : null;
@@ -63,14 +74,16 @@ namespace ImprovedAI.Pathfinding
 
         /// <summary>
         /// Get the next waypoint dynamically without generating the full path.
-        /// This is the primary method used during drone operation.
         /// </summary>
-        public Vector3D? GetNextWaypoint(Vector3D currentPosition, Vector3D targetPosition, PathfindingContext context)
+        public bool GetNextWaypoint(ref Vector3D currentPosition, ref Vector3D targetPosition,
+            PathfindingContext context, out Vector3D waypoint)
         {
+            waypoint = default(Vector3D);
+
             if (config == null)
             {
                 Log.Error("PathfindingManager: Configuration not loaded");
-                return null;
+                return false;
             }
 
             context.WaypointDistance = MathHelper.Clamp(
@@ -78,52 +91,54 @@ namespace ImprovedAI.Pathfinding
                 config.MinWaypointDistance(),
                 config.MaxWaypointDistance());
 
-            var distance = Vector3D.Distance(currentPosition, targetPosition);
+            double distance = Vector3D.Distance(currentPosition, targetPosition);
 
             // Check if we're close enough to target
             if (distance < context.WaypointDistance)
             {
-                return targetPosition;
+                waypoint = targetPosition;
+                return true;
             }
 
             // OPTIMIZATION: Check for direct line of sight before expensive pathfinding
-            // This is worth it for medium-to-long distances where A* would be costly
-            if (distance > 50.0 && HasDirectLineOfSight(currentPosition, targetPosition, context))
+            if (distance > 50.0 && HasDirectLineOfSight(ref currentPosition, ref targetPosition, context))
             {
                 Log.Info("PathfindingManager: Using direct pathfinding (line of sight confirmed)");
-                return directPathfinder.GetNextWaypoint(currentPosition, targetPosition, context);
+                return GetDirectWaypoint(ref currentPosition, ref targetPosition, context, out waypoint);
             }
 
             // No direct line of sight, use normal pathfinder selection
-            var pathfinder = SelectPathfinder(currentPosition, targetPosition, context);
+            var pathfinder = SelectPathfinder(ref context, ref currentPosition, ref targetPosition);
             if (pathfinder == null)
             {
                 Log.Error("PathfindingManager: No pathfinder available");
-                return HandleNoPathfinderAvailable(currentPosition, targetPosition, context);
+                return HandleNoPathfinderAvailable(ref currentPosition, ref targetPosition, out waypoint);
             }
 
             var stopwatch = Stopwatch.StartNew();
 
             try
             {
-                var waypoint = pathfinder.GetNextWaypoint(currentPosition, targetPosition, context);
+                Vector3D waypointResult;
+                bool hasWaypoint = pathfinder.GetNextWaypoint(ref context, ref currentPosition, ref targetPosition, out waypointResult);
 
-                if (waypoint.HasValue)
+                if (hasWaypoint)
                 {
-                    CacheWaypoint(currentPosition, waypoint.Value, distance);
-
+                    CacheWaypoint(ref currentPosition, ref waypointResult, distance);
                     stopwatch.Stop();
-                    LogPathfindingResult(pathfinder.Method, stopwatch.Elapsed, waypoint.Value);
-                    return waypoint.Value;
+                    LogPathfindingResult(pathfinder.Method, stopwatch.Elapsed, ref waypointResult);
+                    waypoint = waypointResult;
+                    return true;
                 }
 
                 if (config.AllowRepathing())
                 {
-                    return HandleRepathing(currentPosition, targetPosition, context, pathfinder);
+                    return HandleRepathing(ref currentPosition, ref targetPosition, context,
+                        pathfinder, out waypoint);
                 }
 
                 Log.Warning("PathfindingManager: Pathfinder failed and repathing is disabled");
-                return null;
+                return false;
             }
             catch (Exception ex)
             {
@@ -132,10 +147,10 @@ namespace ImprovedAI.Pathfinding
 
                 if (config.AllowRepathing())
                 {
-                    return HandleEmergencyPath(currentPosition, targetPosition, context);
+                    return HandleEmergencyPath(ref currentPosition, ref targetPosition, context, out waypoint);
                 }
 
-                return null;
+                return false;
             }
         }
 
@@ -143,49 +158,54 @@ namespace ImprovedAI.Pathfinding
         /// Generate the complete path for debugging purposes.
         /// WARNING: This is expensive and should not be used during normal operation!
         /// </summary>
-        public List<Vector3D> GenerateCompletePath(Vector3D start, Vector3D end, PathfindingContext context)
+        public bool GenerateCompletePath(ref Vector3D start, ref Vector3D end,
+            PathfindingContext context, List<Vector3D> pathOutput)
         {
+            if (pathOutput == null)
+                throw new ArgumentNullException("pathOutput");
+
             Log.Warning("PathfindingManager: GenerateCompletePath called - this is for debugging only!");
 
             if (config == null)
             {
                 Log.Error("PathfindingManager: Configuration not loaded");
-                return CreateEmergencyPath(start, end);
+                return CreateEmergencyPath(ref start, ref end, pathOutput);
             }
 
             context.WaypointDistance = MathHelper.Clamp(
                 context.WaypointDistance,
                 config.MinWaypointDistance(),
-                config.MaxWaypointDistance()  );
+                config.MaxWaypointDistance());
 
-            var pathfinder = SelectPathfinder(start, end, context);
+            var pathfinder = SelectPathfinder(ref context, ref start, ref end);
             if (pathfinder == null)
             {
-                return CreateEmergencyPath(start, end);
+                return CreateEmergencyPath(ref start, ref end, pathOutput);
             }
 
             var stopwatch = Stopwatch.StartNew();
 
             try
             {
-                var path = pathfinder.CalculatePath(start, end, context);
+                pathfinder.CalculatePath(ref context, ref start, ref end, pathOutput);
 
-                if (IsValidPath(path, start, end, context))
+                if (IsValidPath(pathOutput, ref start, ref end, context))
                 {
                     stopwatch.Stop();
-                    LogPathfindingResult(pathfinder.Method, stopwatch.Elapsed, path.Count);
-                    return path;
+                    LogPathfindingResult(pathfinder.Method, stopwatch.Elapsed, pathOutput.Count);
+                    return true;
                 }
 
                 // Path invalid, try fallback
-                if (config.AllowRepathing() && pathfinder != directPathfinder)
+                if (config.AllowRepathing() && pathfinder != directPathfinder && directPathfinder != null)
                 {
                     Log.Warning("PathfindingManager: Primary pathfinder failed, falling back to direct");
-                    path = directPathfinder?.CalculatePath(start, end, context);
+                    pathOutput.Clear();
+                    directPathfinder.CalculatePath(ref context, ref start, ref end, pathOutput);
 
-                    if (IsValidPath(path, start, end, context))
+                    if (IsValidPath(pathOutput, ref start, ref end, context))
                     {
-                        return path;
+                        return true;
                     }
                 }
             }
@@ -198,17 +218,19 @@ namespace ImprovedAI.Pathfinding
             if (config.AllowRepathing())
             {
                 Log.Warning("PathfindingManager: All pathfinders failed, using emergency path");
-                return CreateEmergencyPath(start, end);
+                return CreateEmergencyPath(ref start, ref end, pathOutput);
             }
 
             Log.Error("PathfindingManager: Pathfinding failed and repathing/emergency paths disabled");
-            return new List<Vector3D>(); // Empty path indicates failure
+            pathOutput.Clear();
+            return false;
         }
 
         /// <summary>
         /// Validate that a path is safe and reaches the destination
         /// </summary>
-        private bool IsValidPath(List<Vector3D> path, Vector3D start, Vector3D end, PathfindingContext context)
+        private bool IsValidPath(List<Vector3D> path, ref Vector3D start, ref Vector3D end,
+            PathfindingContext context)
         {
             if (path == null || path.Count < 1)
             {
@@ -217,7 +239,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check that path starts reasonably close to start position
-            var pathStart = path.First();
+            Vector3D pathStart = path[0];
             if (Vector3D.DistanceSquared(pathStart, start) > 100) // Within 10m
             {
                 Log.Warning("PathfindingManager: Path start is too far from actual start position");
@@ -225,7 +247,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check that path ends reasonably close to target
-            var pathEnd = path.Last();
+            Vector3D pathEnd = path[path.Count - 1];
             if (Vector3D.DistanceSquared(pathEnd, end) > 100) // Within 10m
             {
                 Log.Warning("PathfindingManager: Path end is too far from target position");
@@ -243,15 +265,15 @@ namespace ImprovedAI.Pathfinding
             // Validate waypoint spacing
             for (int i = 0; i < path.Count - 1; i++)
             {
-                var distance = Vector3D.Distance(path[i], path[i + 1]);
+                double distance = Vector3D.Distance(path[i], path[i + 1]);
 
-                if (distance < config.MinWaypointDistance() * 0.5) // Allow some tolerance
+                if (distance < config.MinWaypointDistance() * 0.5)
                 {
                     Log.Warning("PathfindingManager: Waypoints too close together at index {0}", i);
                     return false;
                 }
 
-                if (distance > config.MaxWaypointDistance() * 2.0) // Allow some tolerance
+                if (distance > config.MaxWaypointDistance() * 2.0)
                 {
                     Log.Warning("PathfindingManager: Waypoints too far apart at index {0}", i);
                     return false;
@@ -261,28 +283,11 @@ namespace ImprovedAI.Pathfinding
             // Optional: Check if path stays at safe altitude in gravity
             if (config.UsePlanetAwarePathfinding() && context.IsInPlanetGravity())
             {
-                foreach (var waypoint in path)
+                var altitude = context.GetSurfaceAltitude();
+                if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer())
                 {
-                    // Create temporary context at waypoint position to check altitude
-                    var tempContext = new PathfindingContext(
-                        config,
-                        context.Controller,
-                        context.Sensors,
-                        context.Cameras,
-                        new List<IMyThrust>(), // Don't need thrusters for altitude check
-                        context.ShipMass,
-                        context.MaxLoad,
-                        context.WaypointDistance,
-                        controllerForwardDirection
-                    );
-
-                    // Manually set position for check
-                    var altitude = context.GetSurfaceAltitude();
-                    if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer())
-                    {
-                        Log.Warning("PathfindingManager: Path goes below safe altitude");
-                        return false;
-                    }
+                    Log.Warning("PathfindingManager: Path goes below safe altitude");
+                    return false;
                 }
             }
 
@@ -292,9 +297,9 @@ namespace ImprovedAI.Pathfinding
         /// <summary>
         /// Select the best pathfinder based on context and configuration
         /// </summary>
-        private IPathfinder SelectPathfinder(Vector3D start, Vector3D end, PathfindingContext context)
+        private IPathfinder SelectPathfinder(ref PathfindingContext context, ref Vector3D start, ref Vector3D end)
         {
-            var distance = Vector3D.Distance(start, end);
+            double distance = Vector3D.Distance(start, end);
 
             // For very short distances, always use direct pathfinding
             if (distance < config.MinWaypointDistance() * 2)
@@ -303,14 +308,13 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Check if A* is available and conditions warrant its use
-            if (astarPathfinder != null && astarPathfinder.IsAvailable(context))
+            if (astarPathfinder != null && astarPathfinder.IsAvailable(ref context))
             {
-                // Use A* for complex environments with obstacles
-                if (context.SensorInfos?.Count > 0 || context.CamerasByDirection?.Count > 0)
+                if (context.SensorInfos != null && context.SensorInfos.Count > 0 ||
+                    context.CamerasByDirection != null && context.CamerasByDirection.Count > 0)
                 {
-                    var complexity = astarPathfinder.EstimatedComplexity(start, end);
+                    int complexity = astarPathfinder.EstimatedComplexity(ref start, ref end);
 
-                    // Only use A* if the complexity is reasonable
                     if (complexity < config.MaxPathNodes())
                     {
                         Log.Verbose("PathfindingManager: Selected A* pathfinder (complexity: {0})", complexity);
@@ -320,7 +324,7 @@ namespace ImprovedAI.Pathfinding
             }
 
             // Default to direct pathfinding
-            if (directPathfinder != null && directPathfinder.IsAvailable(context))
+            if (directPathfinder != null && directPathfinder.IsAvailable(ref context))
             {
                 Log.Verbose("PathfindingManager: Selected Direct pathfinder");
                 return directPathfinder;
@@ -332,24 +336,27 @@ namespace ImprovedAI.Pathfinding
         /// <summary>
         /// Handle repathing when primary pathfinder fails
         /// </summary>
-        private Vector3D? HandleRepathing(Vector3D currentPosition, Vector3D targetPosition,
-            PathfindingContext context, IPathfinder failedPathfinder)
+        private bool HandleRepathing(ref Vector3D currentPosition, ref Vector3D targetPosition,
+            PathfindingContext context, IPathfinder failedPathfinder, out Vector3D waypoint)
         {
+            waypoint = default(Vector3D);
             Log.Info("PathfindingManager: Attempting repathing from {0}", failedPathfinder.Method);
 
             // Try to find a previously traveled node that could help
-            var nearbyNodes = FindNearbyTraveledNodes(currentPosition, config.MaxWaypointDistance() * 2);
+            FindNearbyTraveledNodes(ref currentPosition, config.MaxWaypointDistance() * 2, _nearbyNodesBuffer);
 
-            foreach (var node in nearbyNodes)
+            double distanceDirect = Vector3D.Distance(currentPosition, targetPosition);
+
+            for (int i = 0; i < _nearbyNodesBuffer.Count; i++)
             {
-                // Check if this node provides a better path to target
-                var distanceFromNode = Vector3D.Distance(node, targetPosition);
-                var distanceDirect = Vector3D.Distance(currentPosition, targetPosition);
+                Vector3D node = _nearbyNodesBuffer[i];
+                double distanceFromNode = Vector3D.Distance(node, targetPosition);
 
                 if (distanceFromNode < distanceDirect * 0.9) // 10% improvement threshold
                 {
                     Log.Info("PathfindingManager: Found useful cached node for repathing");
-                    return node;
+                    waypoint = node;
+                    return true;
                 }
             }
 
@@ -357,38 +364,60 @@ namespace ImprovedAI.Pathfinding
             if (failedPathfinder == astarPathfinder && directPathfinder != null)
             {
                 Log.Info("PathfindingManager: Falling back to Direct pathfinder");
-                var waypoint = directPathfinder.GetNextWaypoint(currentPosition, targetPosition, context);
-
-                if (waypoint.HasValue)
+                if (GetDirectWaypoint(ref currentPosition, ref targetPosition, context, out waypoint))
                 {
-                    return waypoint;
+                    return true;
                 }
             }
 
             // Last resort: emergency path
-            return HandleEmergencyPath(currentPosition, targetPosition, context);
+            return HandleEmergencyPath(ref currentPosition, ref targetPosition, context, out waypoint);
         }
 
         /// <summary>
-        /// Create an emergency direct path when all else fails (only if repathing is enabled)
+        /// Get waypoint using direct pathfinder
         /// </summary>
-        private Vector3D? HandleEmergencyPath(Vector3D currentPosition, Vector3D targetPosition,
-            PathfindingContext context)
+        private bool GetDirectWaypoint(ref Vector3D currentPosition, ref Vector3D targetPosition,
+            PathfindingContext context, out Vector3D waypoint)
         {
+            if (directPathfinder != null)
+            {
+                return directPathfinder.GetNextWaypoint(
+                    ref context,
+                    ref currentPosition,
+                    ref targetPosition,
+                    out waypoint);
+            }
+
+            waypoint = default(Vector3D);
+            return false;
+        }
+
+        /// <summary>
+        /// Create an emergency direct path when all else fails
+        /// </summary>
+        private bool HandleEmergencyPath(ref Vector3D currentPosition, ref Vector3D targetPosition,
+            PathfindingContext context, out Vector3D waypoint)
+        {
+            waypoint = default(Vector3D);
+
             if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: Emergency path needed but repathing is disabled");
-                return null;
+                return false;
             }
 
             Log.Warning("PathfindingManager: Using emergency waypoint generation");
 
             // Calculate a safe intermediate waypoint
-            var direction = Vector3D.Normalize(targetPosition - currentPosition);
-            var distance = Vector3D.Distance(currentPosition, targetPosition);
-            var waypointDistance = Math.Min(distance * 0.5, config.MaxWaypointDistance());
+            Vector3D.Subtract(ref targetPosition, ref currentPosition, out _tempDirection);
+            Vector3D.Normalize(ref _tempDirection, out _tempDirection);
 
-            var waypoint = currentPosition + direction * waypointDistance;
+            double distance = Vector3D.Distance(currentPosition, targetPosition);
+            double waypointDistance = Math.Min(distance * 0.5, config.MaxWaypointDistance());
+
+            Vector3D.Multiply(ref _tempDirection, waypointDistance, out _tempOffset);
+            Vector3D.Add(ref currentPosition, ref _tempOffset, out waypoint);
 
             // If in gravity, ensure we maintain safe altitude
             if (context.IsInPlanetGravity() && config.UsePlanetAwarePathfinding())
@@ -396,64 +425,83 @@ namespace ImprovedAI.Pathfinding
                 var altitude = context.GetSurfaceAltitude();
                 if (altitude.HasValue && altitude.Value < config.MinAltitudeBuffer())
                 {
-                    var gravityUp = Vector3D.Normalize(-context.GravityVector);
-                    waypoint += gravityUp * (config.MinAltitudeBuffer() - altitude.Value);
+                    Vector3D gravityUp;
+                    Vector3D.Negate(ref context.GravityVector, out gravityUp);
+                    Vector3D.Normalize(ref gravityUp, out gravityUp);
+
+                    double liftAmount = config.MinAltitudeBuffer() - altitude.Value;
+                    Vector3D.Multiply(ref gravityUp, liftAmount, out _tempOffset);
+                    Vector3D.Add(ref waypoint, ref _tempOffset, out waypoint);
                 }
             }
 
-            return waypoint;
+            return true;
         }
 
         /// <summary>
         /// Handle case where no pathfinder is available
         /// </summary>
-        private Vector3D? HandleNoPathfinderAvailable(Vector3D currentPosition, Vector3D targetPosition,
-            PathfindingContext context)
+        private bool HandleNoPathfinderAvailable(ref Vector3D currentPosition, ref Vector3D targetPosition,
+            out Vector3D emergencyWaypoint)
         {
             if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: No pathfinder available and repathing disabled");
-                return null;
+                emergencyWaypoint = default(Vector3D);
+                return false;
             }
 
             Log.Error("PathfindingManager: No pathfinder available, using basic emergency waypoint");
 
-            var direction = Vector3D.Normalize(targetPosition - currentPosition);
-            var distance = Vector3D.Distance(currentPosition, targetPosition);
-            var step = Math.Min(distance, config.MaxWaypointDistance());
+            Vector3D.Subtract(ref targetPosition, ref currentPosition, out _tempDirection);
+            Vector3D.Normalize(ref _tempDirection, out _tempDirection);
 
-            return currentPosition + direction * step;
+            double distance = Vector3D.Distance(currentPosition, targetPosition);
+            double step = Math.Min(distance, config.MaxWaypointDistance());
+
+            Vector3D.Multiply(ref _tempDirection, step, out _tempOffset);
+            Vector3D.Add(ref currentPosition, ref _tempOffset, out emergencyWaypoint);
+
+            return true;
         }
 
         /// <summary>
-        /// Create a simple two-point emergency path (only if repathing is enabled)
+        /// Create a simple two-point emergency path
         /// </summary>
-        private List<Vector3D> CreateEmergencyPath(Vector3D start, Vector3D end)
+        private bool CreateEmergencyPath(ref Vector3D start, ref Vector3D end, List<Vector3D> result)
         {
+            if (result == null)
+                throw new ArgumentNullException("result");
+
             if (!config.AllowRepathing())
             {
                 Log.Error("PathfindingManager: Emergency path requested but repathing is disabled");
-                return new List<Vector3D>(); // Empty path
+                result.Clear();
+                return false;
             }
 
             Log.Warning("PathfindingManager: Creating emergency direct path");
-            return new List<Vector3D> { start, end };
+            result.Clear();
+            result.Add(start);
+            result.Add(end);
+            return true;
         }
 
         /// <summary>
         /// Cache a waypoint in the traveled graph for potential repathing
         /// </summary>
-        private void CacheWaypoint(Vector3D from, Vector3D to, double costToTarget)
+        private void CacheWaypoint(ref Vector3D from, ref Vector3D to, double costToTarget)
         {
             try
             {
-                // Convert to grid coordinates for caching (reduce precision to avoid bloat)
-                var gridFrom = Vector3I.Round(from / config.MaxWaypointDistance());
-                var gridTo = Vector3I.Round(to / config.MaxWaypointDistance());
+                double waypointDist = config.MaxWaypointDistance();
+                Vector3D gridFromD = from / waypointDist;
+                Vector3D gridToD = to / waypointDist;
 
-                var distance = Vector3D.Distance(from, to);
+                Vector3I gridFrom = Vector3I.Round(gridFromD);
+                Vector3I gridTo = Vector3I.Round(gridToD);
 
-                // Add edge with distance as cost
+                double distance = Vector3D.Distance(from, to);
                 traveledGraph.AddEdge(gridFrom, gridTo, (float)distance);
 
                 Log.Verbose("PathfindingManager: Cached waypoint edge in traveled graph");
@@ -467,22 +515,26 @@ namespace ImprovedAI.Pathfinding
         /// <summary>
         /// Find previously traveled nodes near a position
         /// </summary>
-        private List<Vector3D> FindNearbyTraveledNodes(Vector3D position, double searchRadius)
+        private void FindNearbyTraveledNodes(ref Vector3D position, double searchRadius,
+            List<Vector3D> outputBuffer)
         {
-            var nearbyNodes = new List<Vector3D>();
-            var gridPosition = Vector3I.Round(position / config.MaxWaypointDistance());
-            var searchRadiusGrid = (int)Math.Ceiling(searchRadius / config.MaxWaypointDistance());
+            outputBuffer.Clear();
+
+            double waypointDist = config.MaxWaypointDistance();
+            Vector3D gridPositionD = position / waypointDist;
+            Vector3I gridPosition = Vector3I.Round(gridPositionD);
+            int searchRadiusGrid = (int)Math.Ceiling(searchRadius / waypointDist);
 
             try
             {
-                foreach (var node in traveledGraph.GetAllNodes())
+                var allNodes = traveledGraph.GetAllNodes();
+                foreach (var node in allNodes)
                 {
-                    var gridDistance = Vector3.Distance(node, gridPosition);
+                    float gridDistance = Vector3.Distance(node, gridPosition);
                     if (gridDistance <= searchRadiusGrid)
                     {
-                        // Convert back to world space
-                        var worldPos = new Vector3D(node.X, node.Y, node.Z) * config.MaxWaypointDistance();
-                        nearbyNodes.Add(worldPos);
+                        Vector3D worldPos = new Vector3D(node.X, node.Y, node.Z) * waypointDist;
+                        outputBuffer.Add(worldPos);
                     }
                 }
             }
@@ -490,33 +542,22 @@ namespace ImprovedAI.Pathfinding
             {
                 Log.Warning("PathfindingManager: Error searching traveled graph: {0}", ex.Message);
             }
-
-            return nearbyNodes;
         }
 
-        private void LogPathfindingResult(PathfindingManager.Method method, TimeSpan elapsed, Vector3D waypoint)
+        private void LogPathfindingResult(PathfindingManager.Method method, TimeSpan elapsed,
+            ref Vector3D waypoint)
         {
             Log.LogPathfinding("Used {0}: {1:F1}ms, waypoint at {2}",
                 method, elapsed.TotalMilliseconds, waypoint);
         }
 
-        private void LogPathfindingResult(PathfindingManager.Method method, TimeSpan elapsed, int waypointCount)
+        private void LogPathfindingResult(PathfindingManager.Method method, TimeSpan elapsed,
+            int waypointCount)
         {
             Log.LogPathfinding("Used {0}: {1:F1}ms, {2} waypoints",
                 method, elapsed.TotalMilliseconds, waypointCount);
         }
 
-        /// <summary>
-        /// Internal state tracking for multi-step pathfinding operations
-        /// </summary>
-        private class PathfindingState
-        {
-            public Vector3D CurrentPosition { get; set; }
-            public Vector3D TargetPosition { get; set; }
-            public List<Vector3D> RemainingPath { get; set; }
-            public int RepathAttempts { get; set; }
-            public PathfindingManager.Method LastMethod { get; set; }
-        }
         /// <summary>
         /// Clear the traveled graph cache
         /// </summary>
@@ -527,61 +568,70 @@ namespace ImprovedAI.Pathfinding
         }
 
         /// <summary>
-        /// Clear old nodes from the traveled graph (older than specified age)
+        /// Clear old nodes from the traveled graph
         /// </summary>
         public void PruneOldTraveledNodes(TimeSpan maxAge)
         {
-            // This would require adding timestamps to the AdjacencyList
-            // For now, just clear everything if it gets too big
-            var nodeCount = traveledGraph.GetAllNodes().Count();
-            if (nodeCount > 1000) // Arbitrary threshold
+            var allNodes = traveledGraph.GetAllNodes();
+            int nodeCount = 0;
+            foreach (var node in allNodes)
             {
-                Log.Warning("PathfindingManager: Traveled graph has {0} nodes, clearing to prevent bloat", nodeCount);
+                nodeCount++;
+            }
+
+            if (nodeCount > 1000)
+            {
+                Log.Warning("PathfindingManager: Traveled graph has {0} nodes, clearing to prevent bloat",
+                    nodeCount);
                 ClearTraveledGraph();
             }
         }
+
         /// <summary>
         /// Check if there's a direct, unobstructed line of sight to the target
-        /// Only performs raycast if cameras are available and distance is reasonable
         /// </summary>
-        private bool HasDirectLineOfSight(Vector3D start, Vector3D end, PathfindingContext context)
+        private bool HasDirectLineOfSight(ref Vector3D start, ref Vector3D end,
+            PathfindingContext context)
         {
-            var distance = Vector3D.Distance(start, end);
+            double distance = Vector3D.Distance(start, end);
 
-            // Don't bother for very short distances (direct pathfinder is already fast enough)
             if (distance < 50.0)
-                return false; // Let normal pathfinding handle it
+                return false;
 
-            // Check if distance is within raycast range
             if (distance > config.MaxSimulatedCameraRaycastMeters())
-                return false; // Too far for raycast
+                return false;
 
-            // Check if we have cameras to perform the raycast
             if (config.RequireCamerasForPathfinding())
             {
-                var direction = end - start;
-                if (!context.CanRaycastInDirection(direction))
+                Vector3D.Subtract(ref end, ref start, out _tempDirection);
+
+                // Need to get transposed world matrix for CanRaycastInDirection
+                if (context.Controller == null)
+                    return false;
+
+                MatrixD worldMatrix = context.Controller.WorldMatrix;
+                MatrixD worldMatrixTransposed;
+                MatrixD.Transpose(ref worldMatrix, out worldMatrixTransposed);
+
+                if (!context.CanRaycastInDirection(ref _tempDirection, ref worldMatrixTransposed))
                 {
-                    // No camera facing target, can't verify line of sight
                     return false;
                 }
             }
 
-            // Perform the actual raycast
-            var ray = new LineD(start, end);
-            var results = new List<MyLineSegmentOverlapResult<MyEntity>>();
+            LineD ray = new LineD(start, end);
+            _raycastResults.Clear();
 
             try
             {
-                pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, results);
+                pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, _raycastResults);
 
-                // Check if any obstacles are in the way
-                foreach (var result in results)
+                for (int i = 0; i < _raycastResults.Count; i++)
                 {
-                    if (IsObstacleEntity(result.Element, context))
+                    if (IsObstacleEntity(_raycastResults[i].Element, context))
                     {
                         Log.Verbose("PathfindingManager: Direct line of sight blocked by {0}",
-                            result.Element.DisplayName ?? "unknown");
+                            _raycastResults[i].Element.DisplayName ?? "unknown");
                         return false;
                     }
                 }
@@ -592,26 +642,31 @@ namespace ImprovedAI.Pathfinding
             catch (Exception ex)
             {
                 Log.Warning("PathfindingManager: Line of sight check failed: {0}", ex.Message);
-                return false; // Assume blocked on error
+                return false;
             }
         }
 
         /// <summary>
-        /// Determine if an entity is an obstacle (reuse from DirectPathfinder)
+        /// Determine if an entity is an obstacle
         /// </summary>
         private bool IsObstacleEntity(IMyEntity entity, PathfindingContext context)
         {
             if (entity == null) return false;
-            if (entity.EntityId == context.CubeGrid?.EntityId) return false;
+            if (context.CubeGrid != null && entity.EntityId == context.CubeGrid.EntityId)
+                return false;
 
-            var grid = entity as IMyCubeGrid;
+            IMyCubeGrid grid = entity as IMyCubeGrid;
             if (grid != null)
             {
-                var connectedGrids = new List<IMyCubeGrid>();
-                MyAPIGateway.GridGroups.GetGroup(context.CubeGrid, GridLinkTypeEnum.Mechanical, connectedGrids);
+                if (context.CubeGrid != null)
+                {
+                    _connectedGridsBuffer.Clear();
+                    MyAPIGateway.GridGroups.GetGroup(context.CubeGrid, GridLinkTypeEnum.Mechanical,
+                        _connectedGridsBuffer);
 
-                if (connectedGrids.Contains(grid))
-                    return false;
+                    if (_connectedGridsBuffer.Contains(grid))
+                        return false;
+                }
 
                 return true;
             }

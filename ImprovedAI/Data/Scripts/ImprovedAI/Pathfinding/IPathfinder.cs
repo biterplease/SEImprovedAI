@@ -7,9 +7,9 @@ namespace ImprovedAI.Pathfinding
     public interface IPathfinder
     {
         PathfindingManager.Method Method { get; }
-        List<Vector3D> CalculatePath(Vector3D start, Vector3D end, PathfindingContext context);
-        bool IsAvailable(PathfindingContext context);
-        int EstimatedComplexity(Vector3D start, Vector3D end);
-        Vector3D? GetNextWaypoint(Vector3D currentPosition, Vector3D targetPosition,  PathfindingContext context);
+        bool CalculatePath(ref PathfindingContext context, ref Vector3D start, ref Vector3D end, List<Vector3D> output);
+        bool IsAvailable(ref PathfindingContext context);
+        int EstimatedComplexity(ref Vector3D start, ref Vector3D end);
+        bool GetNextWaypoint(ref PathfindingContext context,  ref Vector3D currentPosition, ref     Vector3D targetPosition, out Vector3D result);
     }
 }

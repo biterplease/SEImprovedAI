@@ -3,10 +3,8 @@ using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
-using System.Runtime.Remoting.Messaging;
 using VRage.Game.ModAPI;
 using VRageMath;
-
 
 namespace ImprovedAI.Pathfinding
 {
@@ -18,34 +16,30 @@ namespace ImprovedAI.Pathfinding
             public Vector3D Position { get; set; }
             public float MaxRange { get; set; }
         }
+
+        // Public fields - direct access, no property overhead
         public IMyShipController Controller;
+        public IMyGamePruningStructureDelegate pruningStructure;
+        public Base6Directions.Direction ControllerForwardDirection;
+        public IPathfindingConfig PathfindingConfig;
+        public List<IMySensorBlock> Sensors;
+        public List<SensorInfo> SensorInfos;
+        public List<IMyCameraBlock> Cameras;
+        public Dictionary<Base6Directions.Direction, List<IMyCameraBlock>> CamerasByDirection;
+        public Vector3D GravityVector;
+        public float MaxLoad;
+        public float WaypointDistance;
+        public IMyCubeGrid CubeGrid;
+        public ThrustData ThrustData;
+        public float ShipMass;
+        public MyPlanet ClosestPlanet;
+        public Vector3D? PlanetCenter;
+        public double PlanetRadius;
+        public bool isInPlanetGravity;
+
+        // Private cache fields for frequently used calculations
         private Vector3D _cachedLocalDirection;
         private Vector3D _cachedLocalGravity;
-        public IMyGamePruningStructureDelegate pruningStructure { get; set; }
-        public Base6Directions.Direction ControllerForwardDirection { get; set; }
-        public IPathfindingConfig PathfindingConfig;
-        public List<IMySensorBlock> Sensors { get; set; }
-        public List<SensorInfo> SensorInfos { get; set; }
-        public List<IMyCameraBlock> Cameras { get; set; }
-        public Dictionary<Base6Directions.Direction, List<IMyCameraBlock>> CamerasByDirection { get; set; }
-        public Vector3D GravityVector;
-        public float MaxLoad { get; set; }
-        public float WaypointDistance { get; set; }
-        public IMyCubeGrid CubeGrid { get; set; }
-
-        // Enhanced thrust and mass properties
-        public ThrustData ThrustData;
-        public float ShipMass { get; set; }
-
-        public MyPlanet ClosestPlanet { get; set; }
-
-        public Vector3D? PlanetCenter { get; set; }
-        public double PlanetRadius { get; set; }
-        public bool isInPlanetGravity { get; set; }
-
-
-
-
 
         public PathfindingContext(
              IPathfindingConfig pathfindingConfig,
@@ -70,11 +64,7 @@ namespace ImprovedAI.Pathfinding
             CubeGrid = controller?.CubeGrid;
 
             this.pruningStructure = pruningStructureDelegate ?? new MyGamePruningStructureDelegate();
-
-            // Get controller's flight direction
             ControllerForwardDirection = controllerForwardDirection;
-
-            // Cache gravity information
             GravityVector = controller?.GetNaturalGravity() ?? Vector3D.Zero;
 
             // Detect planet if in gravity
@@ -82,18 +72,15 @@ namespace ImprovedAI.Pathfinding
             {
                 PlanetCenter = planetCenter.Value;
                 PlanetRadius = planetRadius.Value;
-                isInPlanetGravity = true;  // FIX: Set flag
+                isInPlanetGravity = true;
             }
             else if (GravityVector.LengthSquared() > 0.1)
             {
-                // In gravity but no explicit planet data provided
-                isInPlanetGravity = true;  // FIX: Set flag based on gravity
+                isInPlanetGravity = true;
             }
 
-            // FIX: Check correct config for sensors
             if (PathfindingConfig.RequireSensorsForPathfinding())
             {
-                // Build sensor cache
                 SensorInfos = new List<SensorInfo>();
                 if (sensors != null)
                 {
@@ -112,6 +99,7 @@ namespace ImprovedAI.Pathfinding
                 }
                 Sensors = sensors;
             }
+
             if (PathfindingConfig.RequireCamerasForPathfinding())
             {
                 CamerasByDirection = new Dictionary<Base6Directions.Direction, List<IMyCameraBlock>>();
@@ -121,10 +109,7 @@ namespace ImprovedAI.Pathfinding
                     {
                         if (camera?.IsFunctional == true)
                         {
-                            // Get camera's physical mounting direction on the ship
                             Base6Directions.Direction cameraDirection = camera.Orientation.Forward;
-
-                            // Map ship direction to navigation direction based on controller forward
                             Base6Directions.Direction navDirection = PathfindingUtil.MapToNavigationDirection(
                                 cameraDirection,
                                 ControllerForwardDirection);
@@ -146,7 +131,10 @@ namespace ImprovedAI.Pathfinding
                 ThrustData.CalculateThrust(thrusters);
             }
         }
- 
+
+        /// <summary>
+        /// Get surface altitude above planet. Returns null if not near a planet.
+        /// </summary>
         public double? GetSurfaceAltitude()
         {
             if (!PlanetCenter.HasValue || Controller == null)
@@ -156,38 +144,51 @@ namespace ImprovedAI.Pathfinding
             double distanceFromCenter = Vector3D.Distance(dronePosition, PlanetCenter.Value);
             return distanceFromCenter - PlanetRadius;
         }
+
+        /// <summary>
+        /// Check if at safe altitude above planet surface.
+        /// </summary>
         public bool IsAtSafeAltitude()
         {
             if (PathfindingConfig == null)
-                return true; // Assume safe if no config
+                return true;
 
             var altitude = GetSurfaceAltitude();
             if (!altitude.HasValue)
-                return true; // Not near a planet, altitude doesn't matter
+                return true;
 
             return altitude.Value > PathfindingConfig.MinAltitudeBuffer();
         }
-        // Calculate effective thrust in world direction
-        public float GetEffectiveThrustInWorldDirection(Vector3D worldDirection)
-        {
-            if (Controller == null) return 0f;
 
-            // Convert world direction to local ship coordinates
-            var localDirection = Vector3D.Transform(worldDirection, MatrixD.Transpose(Controller.WorldMatrix));
-            return PathfindingUtil.GetThrustInDirection(ref localDirection, ref ThrustData);
+        /// <summary>
+        /// Calculate effective thrust in world direction.
+        /// Use version with cached matrix for better performance.
+        /// </summary>
+        public float GetEffectiveThrustInWorldDirection(ref Vector3D worldDirection, ref MatrixD worldMatrixTransposed)
+        {
+            Vector3D.Transform(ref worldDirection, ref worldMatrixTransposed, out _cachedLocalDirection);
+            return PathfindingUtil.GetThrustInDirection(ref _cachedLocalDirection, ref ThrustData);
         }
 
         /// <summary>
-        /// Get the actual world forward direction accounting for controller orientation
+        /// Get the actual world forward direction accounting for controller orientation.
         /// </summary>
-        public Vector3D GetControllerForwardInWorld()
+        public void GetControllerForwardInWorld(ref MatrixD worldMatrix, out Vector3D result)
         {
-            if (Controller == null) return Vector3D.Forward;
+            if (Controller == null)
+            {
+                result = Vector3D.Forward;
+                return;
+            }
 
             var forwardDir = Base6Directions.GetVector(ControllerForwardDirection);
-            return Vector3D.Transform(forwardDir, Controller.WorldMatrix);
+            Vector3D.Transform(ref forwardDir, ref worldMatrix, out result);
         }
 
+        /// <summary>
+        /// Check if ship can climb against gravity in a specific direction.
+        /// Pass pre-calculated transposed world matrix for best performance.
+        /// </summary>
         public bool CanClimbInDirection(ref Vector3D worldDirection, ref MatrixD worldMatrixTransposed)
         {
             Vector3D.Transform(ref worldDirection, ref worldMatrixTransposed, out _cachedLocalDirection);
@@ -196,48 +197,63 @@ namespace ImprovedAI.Pathfinding
             return PathfindingUtil.CanMoveInDirection(ref _cachedLocalDirection, ref _cachedLocalGravity, ref ThrustData, ShipMass);
         }
 
-
-        // Get maximum safe climb angle considering thrust limitations
+        /// <summary>
+        /// Get maximum safe climb angle considering thrust limitations.
+        /// </summary>
         public double GetMaxSafeClimbAngle()
         {
-            if (GravityVector.LengthSquared() < 0.1)
-                return 90.0; // No gravity, can go straight up
+            double gravityLengthSquared = GravityVector.LengthSquared();
+            if (gravityLengthSquared < 0.1)
+                return 90.0;
 
             var upThrust = ThrustData.Up;
-            var gravityForce = ShipMass * GravityVector.Length();
+            var gravityForce = ShipMass * Math.Sqrt(gravityLengthSquared);
 
             if (upThrust <= gravityForce)
-                return 0.0; // Can't climb at all
+                return 0.0;
 
-            // Calculate angle based on thrust-to-weight ratio
             var thrustToWeight = upThrust / gravityForce;
             return Math.Asin(Math.Min(1.0, 1.0 / thrustToWeight)) * 180.0 / Math.PI;
         }
 
-        // Convenience method to check if we have detailed thrust data
+        /// <summary>
+        /// Check if we have detailed thrust data.
+        /// </summary>
         public bool HasDetailedThrustData()
         {
             return PathfindingUtil.GetMaxThrust(ref ThrustData) > 0;
         }
+
+        /// <summary>
+        /// Check if currently in planet gravity.
+        /// </summary>
         public bool IsInPlanetGravity() => isInPlanetGravity;
-        public bool CanRaycastInDirection(Vector3D worldDirection)
+
+        /// <summary>
+        /// Check if can raycast in direction with available cameras.
+        /// Use version with cached matrix for better performance.
+        /// </summary>
+        public bool CanRaycastInDirection(ref Vector3D worldDirection, ref MatrixD worldMatrixTransposed)
         {
-            if (!PathfindingConfig.RequireCamerasForPathfinding()) return true;
-            if (Controller == null || CamerasByDirection == null) return false;
+            if (!PathfindingConfig.RequireCamerasForPathfinding())
+                return true;
+
+            if (Controller == null || CamerasByDirection == null)
+                return false;
 
             // Convert world direction to local ship coordinates
-            var localDirection = Vector3D.Transform(worldDirection, MatrixD.Transpose(Controller.WorldMatrix));
+            Vector3D.Transform(ref worldDirection, ref worldMatrixTransposed, out _cachedLocalDirection);
 
             // Find the dominant direction
-            var absDir = Vector3D.Abs(localDirection);
+            var absDir = Vector3D.Abs(_cachedLocalDirection);
             Base6Directions.Direction dominantDir;
 
             if (absDir.Z > absDir.X && absDir.Z > absDir.Y)
-                dominantDir = localDirection.Z > 0 ? Base6Directions.Direction.Backward : Base6Directions.Direction.Forward;
+                dominantDir = _cachedLocalDirection.Z > 0 ? Base6Directions.Direction.Backward : Base6Directions.Direction.Forward;
             else if (absDir.Y > absDir.X)
-                dominantDir = localDirection.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
+                dominantDir = _cachedLocalDirection.Y > 0 ? Base6Directions.Direction.Up : Base6Directions.Direction.Down;
             else
-                dominantDir = localDirection.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
+                dominantDir = _cachedLocalDirection.X > 0 ? Base6Directions.Direction.Right : Base6Directions.Direction.Left;
 
             // Check if we have cameras facing this direction
             return CamerasByDirection.ContainsKey(dominantDir) && CamerasByDirection[dominantDir].Count > 0;
