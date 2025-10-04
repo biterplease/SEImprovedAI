@@ -1,11 +1,11 @@
 ﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Running;
 using ImprovedAI.Pathfinding;
 using ImprovedAI.TestUtil;
 using Sandbox.ModAPI;
+using System.Collections.Generic;
 using VRageMath;
 
-namespace ImprovedAI.Tests.Benchmarks
+namespace ImprovedAI.Benchmarks.Pathfinding
 {
     /// <summary>
     /// Benchmarks for PathfindingContext climb direction methods.
@@ -203,17 +203,17 @@ namespace ImprovedAI.Tests.Benchmarks
     /// <summary>
     /// Entry point for running benchmarks
     /// </summary>
-    class Program
-    {
-        static void Main(string[] args)
-        {
-            // Run all benchmark classes
-            var switcher = new BenchmarkSwitcher(new[] {
-                typeof(PathfindingContextBenchmarks),
-                typeof(PathfindingContextMultiDirectionBenchmarks)
-            });
+    //class Program
+    //{
+    //    static void Main(string[] args)
+    //    {
+    //        // Run all benchmark classes
+    //        var switcher = new BenchmarkSwitcher(new[] {
+    //            typeof(PathfindingContextBenchmarks),
+    //            typeof(PathfindingContextMultiDirectionBenchmarks)
+    //        });
 
-            switcher.Run(args);
-        }
-    }
+    //        switcher.Run(args);
+    //    }
+    //}
 }

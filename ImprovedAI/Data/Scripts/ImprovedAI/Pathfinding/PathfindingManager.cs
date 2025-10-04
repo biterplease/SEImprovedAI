@@ -45,7 +45,7 @@ namespace ImprovedAI.Pathfinding
         private Vector3D _tempOffset;
 
         public PathfindingManager(
-            PathfindingConfig pathfindingConfig,
+            IPathfindingConfig pathfindingConfig,
             Base6Directions.Direction controllerFwdDirection = Base6Directions.Direction.Forward,
             IMyGamePruningStructureDelegate pruningStructure = null,
             IMyPlanetDelegate planetDelegate = null

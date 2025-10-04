@@ -1,12 +1,5 @@
-﻿using ImprovedAI.Config;
-using ImprovedAI.Pathfinding;
-using Moq;
+﻿using ImprovedAI.Pathfinding;
 using Sandbox.ModAPI;
-using System;
-using System.Collections.Generic;
-using System.Numerics;
-using VRage.Game;
-using VRage.Game.ModAPI;
 using VRageMath;
 using ImprovedAI.TestUtil;
 
