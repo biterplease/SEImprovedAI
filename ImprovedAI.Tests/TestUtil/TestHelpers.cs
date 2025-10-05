@@ -14,90 +14,120 @@ namespace ImprovedAI.Tests.TestUtil
     {
         public static PathfindingContext CreateTestContext(Vector3 gravity, Vector3D position)
         {
-            // Mock grid
-            var gridMock = new Mock<IMyCubeGrid>();
-            gridMock.Setup(g => g.EntityId).Returns(1);
-            gridMock.Setup(g => g.GridSize).Returns(2.5f);
+            var config = new FakePathfindingConfig();
 
-            // Mock controller
-            var controllerMock = new Mock<IMyShipController>();
-            controllerMock.Setup(c => c.GetNaturalGravity()).Returns(gravity);
-            controllerMock.Setup(c => c.CubeGrid).Returns(gridMock.Object);
-            controllerMock.Setup(c => c.WorldMatrix).Returns(MatrixD.CreateTranslation(position));
-            controllerMock.Setup(c => c.GetPosition()).Returns(position);
-            controllerMock.Setup(c => c.IsWorking).Returns(true);
-            controllerMock.Setup(c => c.IsFunctional).Returns(true);
-            controllerMock.Setup(c => c.Orientation).Returns(new MyBlockOrientation(
-                Base6Directions.Direction.Forward,
-                Base6Directions.Direction.Up));
+            var context = new PathfindingContext
+            {
+                // Configuration primitives
+                MinWaypointDistance = config.MinWaypointDistance(),
+                MaxWaypointDistance = config.MaxWaypointDistance(),
+                MinAltitudeBuffer = config.MinAltitudeBuffer(),
+                MaxPathNodes = config.MaxPathNodes(),
+                MaxRepositionAttempts = config.MaxRepositionAttempts(),
+                RequireSensorsForPathfinding = config.RequireSensorsForPathfinding(),
+                RequireCamerasForPathfinding = config.RequireCamerasForPathfinding(),
+                UsePlanetAwarePathfinding = config.UsePlanetAwarePathfinding(),
+                AllowRepathing = config.AllowRepathing(),
 
-            // Mock thrusters
-            var thrusters = new List<IMyThrust>();
-            var directions = new[] {
-                Base6Directions.Direction.Forward,
-                Base6Directions.Direction.Backward,
-                Base6Directions.Direction.Up,
-                Base6Directions.Direction.Down,
-                Base6Directions.Direction.Left,
-                Base6Directions.Direction.Right
+                // Controller state
+                ControllerPosition = position,
+                ControllerWorldMatrix = MatrixD.CreateTranslation(position),
+                ControllerForwardDirection = Base6Directions.Direction.Forward,
+
+                // Environmental data
+                GravityVector = gravity,
+                IsInPlanetGravity = gravity.LengthSquared() > 0.1,
+                PlanetCenter = null,
+                PlanetRadius = 0,
+
+                // Ship capabilities
+                ShipMass = 1000f,
+                MaxLoad = 1.0f,
+                WaypointDistance = config.MaxWaypointDistance(),
+
+                // Initialize lists
+                Sensors = new List<PathfindingContext.SensorData>(),
+                Cameras = new List<PathfindingContext.CameraData>(),
+                TraveledNodes = new List<Vector3D>(),
+                KnownObstacles = new List<PathfindingContext.ObstacleData>(),
+                RaycastCache = new HashSet<Vector3D>(),
+                PathBuffer = new List<Vector3D>(),
+                NeighborBuffer = new List<Vector3I>()
             };
 
-            foreach (var dir in directions)
-            {
-                var thrustMock = new Mock<IMyThrust>();
-                thrustMock.Setup(t => t.Orientation).Returns(new MyBlockOrientation(dir, Base6Directions.Direction.Up));
-                thrustMock.Setup(t => t.MaxEffectiveThrust).Returns(100000f);
-                thrustMock.Setup(t => t.CurrentThrust).Returns(0f);
-                thrustMock.Setup(t => t.IsWorking).Returns(true);
-                thrustMock.Setup(t => t.IsFunctional).Returns(true);
-                thrustMock.Setup(t => t.CubeGrid).Returns(gridMock.Object);
-                thrustMock.Setup(t => t.WorldMatrix).Returns(MatrixD.Identity);
-                thrusters.Add(thrustMock.Object);
-            }
+            // Calculate thrust data
+            context.ThrustData.Forward = 100000f;
+            context.ThrustData.Backward = 100000f;
+            context.ThrustData.Up = 100000f;
+            context.ThrustData.Down = 100000f;
+            context.ThrustData.Left = 100000f;
+            context.ThrustData.Right = 100000f;
 
-            return new PathfindingContext(
-                new FakePathfindingConfig(),
-                controllerMock.Object,
-                new List<IMySensorBlock>(),
-                new List<IMyCameraBlock>(),
-                thrusters,
-                1000f,
-                5000f,
-                50f,
-                Base6Directions.Direction.Forward
-            );
+            return context;
         }
 
-        public static void AddPlanetToContext(PathfindingContext context, Vector3D planetCenter, double radius)
+        public static void AddPlanetToContext(ref PathfindingContext context, Vector3D planetCenter, double radius)
         {
             context.PlanetCenter = planetCenter;
             context.PlanetRadius = radius;
-            context.isInPlanetGravity = true;
+            context.IsInPlanetGravity = true;
+        }
+
+        public static MyEntity CreateMockObstacle(Vector3D position, double size = 10.0)
+        {
+            var entityMock = new Mock<MyEntity>();
+            var positionCompMock = new Mock<MyPositionComponentBase>();
+
+            positionCompMock.Setup(p => p.GetPosition()).Returns(position);
+
+            var boundingBox = new BoundingBoxD(
+                position - new Vector3D(size / 2),
+                position + new Vector3D(size / 2)
+            );
+            positionCompMock.Setup(p => p.WorldAABB).Returns(boundingBox);
+
+            entityMock.Setup(e => e.PositionComp).Returns(positionCompMock.Object);
+            entityMock.Setup(e => e.EntityId).Returns((long)(position.X + position.Y + position.Z));
+
+            return entityMock.Object;
         }
     }
+
     public class MockGamePruningStructureDelegate : IMyGamePruningStructureDelegate
     {
-        private readonly List<MyEntity> entitiesToReturn;
-        private IMyPlanetDelegate planet;
+        private readonly List<MyEntity> lineIntersectionEntities;
+        private readonly List<MyEntity> boxEntities;
 
         public MockGamePruningStructureDelegate()
         {
-            entitiesToReturn = new List<MyEntity>();
+            lineIntersectionEntities = new List<MyEntity>();
+            boxEntities = new List<MyEntity>();
         }
 
-        public void AddMockEntity(MyEntity entity)
+        public void AddLineIntersectionEntity(MyEntity entity)
         {
-            entitiesToReturn.Add(entity);
-        }
-        public void AddPlanetDelegate(IMyPlanetDelegate planetDelegate)
-        {
-            planet = planetDelegate;
+            lineIntersectionEntities.Add(entity);
         }
 
-
-        public void ClearMockEntities()
+        public void AddBoxEntity(MyEntity entity)
         {
-            entitiesToReturn.Clear();
+            boxEntities.Add(entity);
+        }
+
+        public void ClearLineIntersectionEntities()
+        {
+            lineIntersectionEntities.Clear();
+        }
+
+        public void ClearBoxEntities()
+        {
+            boxEntities.Clear();
+        }
+
+        public void ClearAll()
+        {
+            lineIntersectionEntities.Clear();
+            boxEntities.Clear();
         }
 
         public void GetTopmostEntitiesOverlappingRay(
@@ -107,8 +137,7 @@ namespace ImprovedAI.Tests.TestUtil
         {
             result.Clear();
 
-            // Return mock entities
-            foreach (var entity in entitiesToReturn)
+            foreach (var entity in lineIntersectionEntities)
             {
                 result.Add(new MyLineSegmentOverlapResult<MyEntity>
                 {
@@ -117,11 +146,22 @@ namespace ImprovedAI.Tests.TestUtil
                 });
             }
         }
-        public IMyPlanetDelegate GetClosestPlanet(Vector3D position)
+
+        public void GetTopMostEntitiesInBox(ref BoundingBoxD boundingBox, List<MyEntity> result, MyEntityQueryType queryType)
         {
-            return planet;
+            result.Clear();
+
+            foreach (var entity in boxEntities)
+            {
+                var entityPos = entity.PositionComp.GetPosition();
+                if (boundingBox.Contains(entityPos) != ContainmentType.Disjoint)
+                {
+                    result.Add(entity);
+                }
+            }
         }
     }
+
     public class MockPlanetDelegate : IMyPlanetDelegate
     {
         private MyPlanet mockPlanet;
@@ -138,10 +178,7 @@ namespace ImprovedAI.Tests.TestUtil
         {
             mockPlanetCenter = center;
             mockPlanetRadius = radius;
-
-            // Create a minimal mock planet if needed
-            // In reality, you might use Moq here too
-            mockPlanet = null; // Will be null in tests, handled by altitude calculation
+            mockPlanet = null;
         }
 
         public void ClearMockPlanet()
@@ -151,13 +188,12 @@ namespace ImprovedAI.Tests.TestUtil
 
         public MyPlanet GetClosestPlanet(Vector3D position)
         {
-            // Return mock planet if position is within reasonable distance
             if (mockPlanetRadius > 0)
             {
                 var distance = Vector3D.Distance(position, mockPlanetCenter);
-                if (distance < mockPlanetRadius * 3) // Within 3x radius
+                if (distance < mockPlanetRadius * 3)
                 {
-                    return mockPlanet; // Can be null, handled by callers
+                    return mockPlanet;
                 }
             }
 
@@ -166,7 +202,6 @@ namespace ImprovedAI.Tests.TestUtil
 
         public double GetSurfaceAltitude(Vector3D position, MyPlanet planet)
         {
-            // Use mock planet data regardless of actual planet object
             if (mockPlanetRadius > 0)
             {
                 var distanceFromCenter = Vector3D.Distance(position, mockPlanetCenter);
@@ -174,18 +209,6 @@ namespace ImprovedAI.Tests.TestUtil
             }
 
             return double.MaxValue;
-        }
-        public static MyEntity CreateMockObstacle(Vector3D position)
-        {
-            // Use Moq to create a minimal MyEntity
-            var entityMock = new Mock<MyEntity>();
-            var positionCompMock = new Mock<MyPositionComponentBase>();
-
-            positionCompMock.Setup(p => p.GetPosition()).Returns(position);
-            entityMock.Setup(e => e.PositionComp).Returns(positionCompMock.Object);
-            entityMock.Setup(e => e.EntityId).Returns(123);
-
-            return entityMock.Object;
         }
     }
 }

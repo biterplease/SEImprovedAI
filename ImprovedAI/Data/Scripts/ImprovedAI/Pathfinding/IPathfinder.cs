@@ -1,15 +1,19 @@
-﻿using ImprovedAI.Config;
+﻿using ImprovedAI.Pathfinding;
 using System.Collections.Generic;
 using VRageMath;
 
-namespace ImprovedAI.Pathfinding
+public interface IPathfinder
 {
-    public interface IPathfinder
-    {
-        PathfindingManager.Method Method { get; }
-        bool CalculatePath(ref PathfindingContext context, ref Vector3D start, ref Vector3D end, List<Vector3D> output);
-        bool IsAvailable(ref PathfindingContext context);
-        int EstimatedComplexity(ref Vector3D start, ref Vector3D end);
-        bool GetNextWaypoint(ref PathfindingContext context,  ref Vector3D currentPosition, ref     Vector3D targetPosition, out Vector3D result);
-    }
+    PathfindingManager.Method Method { get; }
+
+    PathfindingResult GetNextWaypoint(
+        ref PathfindingContext context,
+        ref Vector3D start,
+        ref Vector3D end,
+        out Vector3D waypoint,
+        out PathfindingRequest request);
+
+    bool CalculatePath(ref PathfindingContext context, ref Vector3D start, ref Vector3D end, List<Vector3D> output);
+    double CalculatePathComplexity(ref PathfindingContext context, ref Vector3D start, ref Vector3D end);
+    double GetNextWaypointComplexity(ref PathfindingContext context, ref Vector3D start, ref Vector3D end);
 }
