@@ -8,7 +8,7 @@ using VRage.Game.Entity;
 using VRage.Game.ModAPI;
 using VRageMath;
 
-namespace ImprovedAI.TestUtil
+namespace ImprovedAI.Tests.TestUtil
 {
     public static class TestHelpers
     {

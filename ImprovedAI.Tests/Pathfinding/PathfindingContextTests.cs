@@ -2,7 +2,7 @@
 using ImprovedAI.Pathfinding;
 using Sandbox.ModAPI;
 using VRageMath;
-using ImprovedAI.TestUtil;
+using ImprovedAI.Tests.TestUtil;
 using System.Collections.Generic;
 using System;
 

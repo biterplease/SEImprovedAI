@@ -1,7 +1,7 @@
 ﻿using ImprovedAI.Config;
 using System;
 
-namespace ImprovedAI.TestUtil
+namespace ImprovedAI.Tests.TestUtil
 {
     public class FakePathfindingConfig : IPathfindingConfig
     {

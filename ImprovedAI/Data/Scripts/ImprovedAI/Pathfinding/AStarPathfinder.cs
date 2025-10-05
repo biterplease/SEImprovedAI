@@ -46,6 +46,7 @@ namespace ImprovedAI.Pathfinding
         private Vector3D _tempBoxMax;
         private MatrixD _cachedWorldMatrix;
         private MatrixD _cachedWorldMatrixTransposed;
+        private double _cachedDistance;
 
         // Static pre-computed direction arrays for all 6 forward orientations
         private static readonly Vector3I[] DIRECTIONS_FORWARD_Z = new Vector3I[26]
@@ -186,9 +187,9 @@ namespace ImprovedAI.Pathfinding
 
         public int EstimatedComplexity(ref Vector3D start, ref Vector3D end)
         {
-            double distance = Vector3D.Distance(start, end);
-            double gridSpacing = CalculateOptimalGridSpacing(distance);
-            int estimatedNodes = (int)((distance / gridSpacing) * 1.5);
+            Vector3D.Distance(ref start, ref end, out _cachedDistance);
+            double gridSpacing = CalculateOptimalGridSpacing(_cachedDistance);
+            int estimatedNodes = (int)((_cachedDistance / gridSpacing) * 1.5);
             return Math.Min(estimatedNodes, config.MaxPathNodes());
         }
 
@@ -203,10 +204,10 @@ namespace ImprovedAI.Pathfinding
                 return false;
             }
 
-            double distance = Vector3D.Distance(currentPosition, targetPosition);
+            Vector3D.Distance(ref currentPosition, ref targetPosition, out _cachedDistance);
 
             // For very short distances, use direct pathfinding
-            if (distance < context.WaypointDistance * 2)
+            if (_cachedDistance < context.WaypointDistance * 2)
             {
                 return directFallback.GetNextWaypoint(ref context, ref currentPosition,
                     ref targetPosition, out result);
@@ -241,7 +242,10 @@ namespace ImprovedAI.Pathfinding
             return false;
         }
 
-        public bool CalculatePath(ref PathfindingContext context, ref Vector3D start, ref Vector3D end,
+        public bool CalculatePath(
+            ref PathfindingContext context,
+            ref Vector3D start,
+            ref Vector3D end,
             List<Vector3D> pathWaypoints)
         {
             if (pathWaypoints == null)
@@ -285,8 +289,8 @@ namespace ImprovedAI.Pathfinding
         {
             DateTime startTime = DateTime.UtcNow;
 
-            double distance = Vector3D.Distance(start, end);
-            double gridSpacing = CalculateOptimalGridSpacing(distance);
+            Vector3D.Distance(ref start, ref end, out _cachedDistance);
+            double gridSpacing = CalculateOptimalGridSpacing(_cachedDistance);
 
             Vector3I gridStart = WorldToGrid(ref start, gridSpacing);
             Vector3I gridEnd = WorldToGrid(ref end, gridSpacing);
@@ -363,7 +367,7 @@ namespace ImprovedAI.Pathfinding
                     return true;
                 }
 
-                GetNeighbors(current.Position, forwardDirections);
+                GetNeighbors(ref current.Position, forwardDirections);
 
                 for (int i = 0; i < neighborList.Count; i++)
                 {
@@ -457,7 +461,7 @@ namespace ImprovedAI.Pathfinding
                 return _tempDirection.X > 0 ? DIRECTIONS_FORWARD_X : DIRECTIONS_BACKWARD_X;
         }
 
-        private void GetNeighbors(Vector3I position, Vector3I[] directions)
+        private void GetNeighbors(ref Vector3I position, Vector3I[] directions)
         {
             neighborList.Clear();
 

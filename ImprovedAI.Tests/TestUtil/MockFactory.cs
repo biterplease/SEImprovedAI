@@ -11,7 +11,7 @@ using VRage.Game;
 using ImprovedAI.Pathfinding;
 using ImprovedAI.Utils.Logging;
 
-namespace ImprovedAI.TestUtil
+namespace ImprovedAI.Tests.TestUtil
 {
 
     public static class SEMockFactory

@@ -1,11 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
-using ImprovedAI.Config;
 using ImprovedAI.Pathfinding;
-using ImprovedAI.TestUtil;
+using ImprovedAI.Tests.TestUtil;
 using Sandbox.ModAPI;
 using System.Collections.Generic;
 using VRageMath;
-using VRage.Game;
 
 namespace ImprovedAI.Benchmarks.Pathfinding
 {

@@ -1,5 +1,5 @@
 ﻿using ImprovedAI.Pathfinding;
-using ImprovedAI.TestUtil;
+using ImprovedAI.Tests.TestUtil;
 using Sandbox.ModAPI;
 using VRageMath;
 using Microsoft.VisualStudio.TestTools.UnitTesting;

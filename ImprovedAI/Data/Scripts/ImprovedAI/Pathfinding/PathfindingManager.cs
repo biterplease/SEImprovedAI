@@ -85,6 +85,8 @@ namespace ImprovedAI.Pathfinding
                 Log.Error("PathfindingManager: Configuration not loaded");
                 return false;
             }
+            if (!config.AllowDirectPathfinding() && !config.AllowAStar())
+                return false;
 
             context.WaypointDistance = MathHelper.Clamp(
                 context.WaypointDistance,
