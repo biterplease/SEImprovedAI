@@ -1,9 +1,5 @@
 ﻿using Sandbox.Game.Entities;
-using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using VRage.Game.Entity;
 using VRageMath;
 
@@ -20,7 +16,7 @@ namespace ImprovedAI.Pathfinding
             List<MyLineSegmentOverlapResult<MyEntity>> result,
             MyEntityQueryType queryType = MyEntityQueryType.Both);
 
-        IMyPlanetDelegate GetClosestPlanet(Vector3D position);
+        void GetTopMostEntitiesInBox(ref BoundingBoxD boundingBox, List<MyEntity> result, MyEntityQueryType queryType);
     }
 
     /// <summary>
@@ -35,9 +31,9 @@ namespace ImprovedAI.Pathfinding
         {
             MyGamePruningStructure.GetTopmostEntitiesOverlappingRay(ref line, result, queryType);
         }
-        public IMyPlanetDelegate GetClosestPlanet(Vector3D position)
+        public void GetTopMostEntitiesInBox(ref BoundingBoxD boundingBox, List<MyEntity> result, MyEntityQueryType queryType)
         {
-            return (IMyPlanetDelegate)MyGamePruningStructure.GetClosestPlanet(position);
+            MyGamePruningStructure.GetTopMostEntitiesInBox(ref boundingBox, result, queryType);
         }
     }
 }
