@@ -80,6 +80,8 @@ namespace ImprovedAI.Network
             public double SenderTransmitRange;
             [ProtoMember(9)]
             public long SenderOwnerId;
+            [ProtoMember(10)]
+            public HashSet<long> ValidRecipients;
         }
 
         private readonly MessageSerializationMode serializationMode = ServerConfig.Instance.DroneNetwork.MessageSerializationMode;
@@ -188,34 +190,62 @@ namespace ImprovedAI.Network
         }
 
         /// <summary>
-        /// Send message with antenna range validation
+        /// Send message with antenna range validation and cached recipient calculation
         /// </summary>
         public ushort SendMessage<T>(ushort topic, T message, long senderId, bool requiresAck = false)
             where T : class
         {
-            if (message == null) return 0;
+            if (message == null)
+            {
+                Log.Warning("Cannot send null message");
+                return 0;
+            }
 
             // Get sender's cached antenna info
             AntennaCache senderCache;
             if (!_antennaCache.TryGetValue(senderId, out senderCache))
             {
-                throw new InvalidOperationException($"Entity {senderId} not registered with message queue");
+                Log.Warning("Entity {0} not registered with message queue", senderId);
+                return 0;
             }
 
             if (!senderCache.IsValid())
             {
-                throw new InvalidOperationException($"Entity {senderId} antenna is not functional");
+                Log.Warning("Entity {0} antenna is not functional", senderId);
+                return 0;
             }
 
             // Check if there are any subscribers
             MyConcurrentHashSet<long> subscribers;
             if (!_topicSubscribers.TryGetValue(topic, out subscribers) || subscribers.Count == 0)
             {
-                throw new InvalidOperationException($"No subscribers listening to topic {topic}");
+                Log.Verbose("No subscribers listening to topic {0}", topic);
+                return 0;
             }
 
             try
             {
+                // Calculate valid recipients at send time (caching CanShare checks)
+                var validRecipients = new HashSet<long>();
+                foreach (var subId in subscribers)
+                {
+                    AntennaCache subCache;
+                    if (_antennaCache.TryGetValue(subId, out subCache) && subCache.IsValid())
+                    {
+                        var subBlock = subCache.Antenna as IMyTerminalBlock;
+                        if (CanShare(senderCache.OwnerId, subCache.OwnerId, subBlock))
+                        {
+                            validRecipients.Add(subId);
+                        }
+                    }
+                }
+
+                if (validRecipients.Count == 0)
+                {
+                    Log.Verbose("No valid recipients for message from entity {0} on topic {1}", senderId, topic);
+                    return 0;
+                }
+
                 var serializedData = SerializeMessage(message);
                 if (serializedData == null) return 0;
 
@@ -232,7 +262,8 @@ namespace ImprovedAI.Network
                     SerializationMode = serializationMode,
                     SenderPosition = senderCache.Position,
                     SenderTransmitRange = senderCache.TransmitRange,
-                    SenderOwnerId = senderCache.OwnerId
+                    SenderOwnerId = senderCache.OwnerId,
+                    ValidRecipients = validRecipients
                 };
 
                 queue.Enqueue(timestampedMessage);
@@ -255,6 +286,7 @@ namespace ImprovedAI.Network
 
         /// <summary>
         /// Read messages with antenna range validation (IGC-like behavior)
+        /// Uses cached ValidRecipients for efficiency
         /// </summary>
         public List<T> ReadMessages<T>(long subscriberId, ushort topic, ushort maxMessages = 10)
             where T : class, new()
@@ -288,8 +320,6 @@ namespace ImprovedAI.Network
                     return messages;
                 }
 
-                var receiverBlock = receiverCache.Antenna as IMyTerminalBlock;
-
                 DateTime oldTime;
                 _lastReadTimes.TryRemove(subscriberId, out oldTime);
                 _lastReadTimes.TryAdd(subscriberId, DateTime.UtcNow);
@@ -307,36 +337,43 @@ namespace ImprovedAI.Network
                         tempMessages.Add(msg);
                     }
 
-                    // Process messages with range and ownership checking
+                    // Process messages using cached ValidRecipients
                     foreach (var message in tempMessages)
                     {
                         bool messageExpired = (currentTime - message.Timestamp) > _messageExpiration;
 
                         if (!messageExpired)
                         {
-                            // IGC behavior: receiver can receive if sender's transmit range reaches them
-                            double distance = Vector3D.Distance(message.SenderPosition, receiverCache.Position);
-                            bool inRange = distance <= message.SenderTransmitRange;
+                            // Check if this subscriber is in the cached valid recipients list
+                            bool isValidRecipient = message.ValidRecipients != null &&
+                                                   message.ValidRecipients.Contains(subscriberId);
 
-                            // Check ownership/sharing
-                            bool canShareInfo = CanShare(message.SenderOwnerId, receiverCache.OwnerId, receiverBlock);
-
-                            bool canReceive = inRange && canShareInfo;
-
-                            if (canReceive && messages.Count < maxMessages)
+                            if (isValidRecipient)
                             {
-                                var deserializedMsg = DeserializeMessage<T>(message.Data);
-                                if (deserializedMsg != null)
-                                {
-                                    messages.Add(deserializedMsg);
+                                // Additional range check (position may have changed since send)
+                                double distance = Vector3D.Distance(message.SenderPosition, receiverCache.Position);
+                                bool inRange = distance <= message.SenderTransmitRange;
 
-                                    if (message.RequiresAck)
+                                if (inRange && messages.Count < maxMessages)
+                                {
+                                    var deserializedMsg = DeserializeMessage<T>(message.Data);
+                                    if (deserializedMsg != null)
                                     {
-                                        AckMessage(subscriberId, message.MessageId);
+                                        messages.Add(deserializedMsg);
+
+                                        if (message.RequiresAck)
+                                        {
+                                            AckMessage(subscriberId, message.MessageId);
+                                        }
                                     }
                                 }
+                                else if (!inRange)
+                                {
+                                    // Re-queue for potential later reception (may move back in range)
+                                    queue.Enqueue(message);
+                                }
                             }
-                            else if (!canReceive)
+                            else
                             {
                                 // Re-queue for other potential receivers
                                 queue.Enqueue(message);

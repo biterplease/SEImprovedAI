@@ -5,7 +5,7 @@ using VRageMath;
 
 namespace ImprovedAI.Messages
 {
-    public enum MessageTopics : ushort
+    public enum MessageTopics : byte
     {
         DRONE_REGISTRATION,
         DRONE_REPORTS,
