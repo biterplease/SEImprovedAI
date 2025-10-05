@@ -1,324 +1,418 @@
 ﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ImprovedAI.Pathfinding;
-using Sandbox.ModAPI;
-using VRageMath;
 using ImprovedAI.Tests.TestUtil;
+using Sandbox.ModAPI;
 using System.Collections.Generic;
+using VRageMath;
 
 namespace ImprovedAI.Tests.Pathfinding
 {
     [TestClass]
     public class PathfindingManagerTests
     {
-        private FakePathfindingConfig _config;
-        private PathfindingManager _manager;
+        private FakePathfindingConfig config;
+        private MockGamePruningStructureDelegate pruning;
+        private MockPlanetDelegate planet;
 
         [TestInitialize]
         public void Setup()
         {
-            _config = new FakePathfindingConfig
-            {
-                allowDirectPathfinding = true,
-                allowAStar = true,
-                allowRepathing = true,
-                requireSensorsForPathfinding = false,
-                requireCamerasForPathfinding = false,
-                usePlanetAwarePathfinding = true,
-                minWaypointDistance = 25.0f,
-                maxWaypointDistance = 100.0f,
-                minAltitudeBuffer = 50.0f,
-                maxPathNodes = 1000,
-                maxRepositionAttempts = 3
-            };
-            _manager = new PathfindingManager(_config);
+            config = new FakePathfindingConfig();
+            pruning = new MockGamePruningStructureDelegate();
+            planet = new MockPlanetDelegate();
         }
 
         [TestMethod]
-        public void GetNextWaypoint_ShortDistance_UsesDirectPathfinder()
+        public void Constructor_InitializesCorrectly()
         {
-            var context = CreateBasicContext();
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            
+            Assert.IsNotNull(manager);
+        }
+
+        [TestMethod]
+        public void ControllerChanged_UpdatesInternalState()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(new Vector3D(100, 200, 300));
+
+            manager.ControllerChanged(controller);
+
+            // Should not throw and should accept subsequent operations
+            var grid = SEMockFactory.CreateMockGrid();
+            manager.GridChanged(grid);
+        }
+
+        [TestMethod]
+        public void ThrustersChanged_SingleThruster_UpdatesContext()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = new List<IMyThrust>
+            {
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 50000f, entityId: 1)
+            };
+
+            manager.ControllerChanged(controller);
+            manager.ThrustersChanged(thrusters);
+
+            // Verify by checking recalculation flag
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void ThrustersChanged_MultipleTimes_DetectsChanges()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+
+            manager.ControllerChanged(controller);
+
+            // First update
+            var thrusters1 = new List<IMyThrust>
+            {
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 50000f, entityId: 1)
+            };
+            manager.ThrustersChanged(thrusters1);
+
+            // Clear flag by setting target and getting waypoint
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+
+            // Second update with damaged thruster
+            var thrusters2 = new List<IMyThrust>
+            {
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 50000f, isWorking: false, entityId: 1)
+            };
+            manager.ThrustersChanged(thrusters2);
+
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void ThrustersChanged_NoStateChange_DoesNotSetFlag()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = new List<IMyThrust>
+            {
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 50000f, entityId: 1)
+            };
+
+            manager.ControllerChanged(controller);
+            manager.ThrustersChanged(thrusters);
+
+            // Set target and get waypoint to clear flag
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+
+            // Update with same state
+            manager.ThrustersChanged(thrusters);
+
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void SensorsChanged_UpdatesInternalState()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var sensors = new List<IMySensorBlock>
+            {
+                SEMockFactory.CreateMockSensor(new Vector3D(10, 0, 0), 50f, entityId: 1)
+            };
+
+            manager.ControllerChanged(controller);
+            manager.SensorsChanged(sensors);
+
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void SensorsChanged_AddAndRemove_DetectsChanges()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+
+            manager.ControllerChanged(controller);
+
+            // Add sensor
+            var sensors1 = new List<IMySensorBlock>
+            {
+                SEMockFactory.CreateMockSensor(Vector3D.Zero, 50f, entityId: 1)
+            };
+            manager.SensorsChanged(sensors1);
+
+            // Clear flag
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+
+            // Remove sensor
+            manager.SensorsChanged(new List<IMySensorBlock>());
+
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void CamerasChanged_UpdatesInternalState()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var cameras = new List<IMyCameraBlock>
+            {
+                SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward, entityId: 1)
+            };
+
+            manager.ControllerChanged(controller);
+            manager.CamerasChanged(cameras);
+
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void GridChanged_UpdatesMass()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var grid1 = SEMockFactory.CreateMockGrid(mass: 1000f);
+
+            manager.ControllerChanged(controller);
+            manager.GridChanged(grid1);
+
+            // Mass change should trigger recalculation
+            var grid2 = SEMockFactory.CreateMockGrid(mass: 2000f);
+            manager.GridChanged(grid2);
+
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void SetTarget_StoresTarget()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            
+            manager.ControllerChanged(controller);
+
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+
+            // Should be able to get waypoint
+            Vector3D waypoint;
+            var result = manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsTrue(result);
+        }
+
+        [TestMethod]
+        public void GetNextWaypoint_WithoutTarget_Fails()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            
+            manager.ControllerChanged(controller);
+
+            Vector3D waypoint;
+            var result = manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsFalse(result);
+        }
+
+        [TestMethod]
+        public void GetNextWaypoint_WithTarget_Succeeds()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
+
+            TestHelpers.SetupManagerComponents(manager, controller, thrusters: thrusters);
+
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+
+            Vector3D waypoint;
+            var result = manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsTrue(result);
+            Assert.AreNotEqual(Vector3D.Zero, waypoint);
+        }
+
+        [TestMethod]
+        public void GetNextWaypoint_ClearsRecalculationFlag()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
+
+            TestHelpers.SetupManagerComponents(manager, controller, thrusters: thrusters);
+
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void IsPathClear_NoObstacles_ReturnsTrue()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            
+            manager.ControllerChanged(controller);
+
             var start = new Vector3D(0, 0, 0);
             var end = new Vector3D(100, 0, 0);
 
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
+            var result = manager.IsPathClear(ref start, ref end);
 
-            Assert.IsTrue(result, "Should generate waypoint");
-            Assert.IsTrue(waypoint != Vector3D.Zero, "Waypoint should be valid");
+            Assert.IsTrue(result);
         }
 
         [TestMethod]
-        public void GetNextWaypoint_LongDistance_SelectsAppropriatePathfinder()
+        public void Close_CleansUpResources()
         {
-            var context = CreateBasicContext();
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(5000, 0, 0);
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
 
+            TestHelpers.SetupManagerComponents(manager, controller, thrusters: thrusters);
+
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+
+            manager.Close();
+
+            // After close, operations should fail gracefully
             Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
+            var result = manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
 
-            Assert.IsTrue(result, "Should generate waypoint for long distance");
+            Assert.IsFalse(result);
         }
 
         [TestMethod]
-        public void GetNextWaypoint_WithSensors_PrefersAStar()
+        public void Close_MultipleCalls_SafelyHandled()
         {
-            var context = CreateBasicContext();
-            context.SensorInfos = new List<PathfindingContext.SensorInfo>
-            {
-                new PathfindingContext.SensorInfo
-                {
-                    Sensor = SEMockFactory.CreateMockSensor(new Vector3D(0, 0, 0), 50f),
-                    Position = new Vector3D(0, 0, 0),
-                    MaxRange = 50f
-                }
-            };
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            
+            manager.Close();
+            manager.Close(); // Should not throw
+
+            Assert.IsTrue(true); // If we get here, test passes
+        }
+
+        [TestMethod]
+        public void ClearCache_RemovesCachedNodes()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
+
+            TestHelpers.SetupManagerComponents(manager, controller, thrusters: thrusters);
+
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+
+            manager.ClearCache();
+
+            // After clear, should not have recalculation flag set
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void GetPathComplexity_ReturnsValidValue()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
+
+            TestHelpers.SetupManagerComponents(manager, controller, thrusters: thrusters);
 
             var start = new Vector3D(0, 0, 0);
             var end = new Vector3D(1000, 0, 0);
 
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
+            var complexity = manager.GetPathComplexity(ref start, ref end);
 
-            Assert.IsTrue(result, "Should generate waypoint with sensors available");
+            Assert.IsTrue(complexity > 0);
         }
 
         [TestMethod]
-        public void GetNextWaypoint_AStarDisabled_FallsBackToDirect()
+        public void ComponentChanges_CachedByEntityId()
         {
-            _config.allowAStar = false;
-            _manager = new PathfindingManager(_config);
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
 
-            var context = CreateBasicContext();
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(1000, 0, 0);
+            manager.ControllerChanged(controller);
 
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            Assert.IsTrue(result, "Should fall back to direct pathfinder");
-        }
-
-        [TestMethod]
-        public void GetNextWaypoint_AllPathfindersDisabled_Fails()
-        {
-            _config.allowDirectPathfinding = false;
-            _config.allowAStar = false;
-            _manager = new PathfindingManager(_config);
-
-            var context = CreateBasicContext();
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(100, 0, 0);
-
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            Assert.IsFalse(result, "Should fail when no pathfinders available");
-        }
-
-        [TestMethod]
-        public void GetNextWaypoint_PathfinderFails_AttemptsRepathing()
-        {
-            var context = CreateBasicContext();
-
-            // Create obstacle that blocks direct path
-            context.SensorInfos = new List<PathfindingContext.SensorInfo>
+            // Add thruster with specific entityId
+            var thrusters1 = new List<IMyThrust>
             {
-                new PathfindingContext.SensorInfo
-                {
-                    Sensor = SEMockFactory.CreateMockSensor(new Vector3D(50, 0, 0), 100f),
-                    Position = new Vector3D(50, 0, 0),
-                    MaxRange = 100f
-                }
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 50000f, entityId: 100)
+            };
+            manager.ThrustersChanged(thrusters1);
+
+            // Clear flag
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
+            Vector3D waypoint;
+            manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
+            Assert.IsFalse(manager.ShouldRecalculateWaypoint());
+
+            // Update same thruster (same entityId) with different thrust
+            var thrusters2 = new List<IMyThrust>
+            {
+                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 60000f, entityId: 100)
+            };
+            manager.ThrustersChanged(thrusters2);
+
+            // Should detect change
+            Assert.IsTrue(manager.ShouldRecalculateWaypoint());
+        }
+
+        [TestMethod]
+        public void SetupManagerComponents_Helper_WorksCorrectly()
+        {
+            var manager = TestHelpers.CreateMockManager(config, pruning, planet);
+            var controller = SEMockFactory.CreateMockController(Vector3D.Zero);
+            var grid = SEMockFactory.CreateMockGrid();
+            var thrusters = SEMockFactory.CreateStandardThrusterSet();
+            var sensors = new List<IMySensorBlock>
+            {
+                SEMockFactory.CreateMockSensor(Vector3D.Zero, 50f, entityId: 1)
+            };
+            var cameras = new List<IMyCameraBlock>
+            {
+                SEMockFactory.CreateMockCamera(Base6Directions.Direction.Forward, entityId: 1)
             };
 
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(100, 0, 0);
+            TestHelpers.SetupManagerComponents(manager, controller, grid, thrusters, sensors, cameras);
+
+            // All components should be set
+            var target = new Vector3D(1000, 0, 0);
+            manager.SetTarget(ref target);
 
             Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            // Should either find alternate route or use emergency path
-            Assert.IsTrue(result, "Should handle blocked path with repathing");
-        }
-
-        [TestMethod]
-        public void GetNextWaypoint_RepathingDisabled_FailsOnBlockedPath()
-        {
-            _config.allowRepathing = false;
-            _manager = new PathfindingManager(_config);
-
-            var context = CreateBasicContext();
-            context.SensorInfos = new List<PathfindingContext.SensorInfo>
-            {
-                new PathfindingContext.SensorInfo
-                {
-                    Sensor = SEMockFactory.CreateMockSensor(new Vector3D(50, 0, 0), 100f),
-                    Position = new Vector3D(50, 0, 0),
-                    MaxRange = 100f
-                }
-            };
-
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(100, 0, 0);
-
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            Assert.IsFalse(result, "Should fail when repathing disabled and path blocked");
-        }
-
-        [TestMethod]
-        public void GenerateCompletePath_CreatesValidPath()
-        {
-            var context = CreateBasicContext();
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(500, 0, 0);
-            var pathOutput = new List<Vector3D>();
-
-            bool result = _manager.GenerateCompletePath(ref start, ref end, context, pathOutput);
-
-            Assert.IsTrue(result, "Should generate complete path");
-            Assert.IsTrue(pathOutput.Count >= 2, "Path should have at least start and end");
-            Assert.AreEqual(start, pathOutput[0], "Path should start at start position");
-            Assert.AreEqual(end, pathOutput[pathOutput.Count - 1], "Path should end at end position");
-        }
-
-        [TestMethod]
-        public void GenerateCompletePath_WithGravity_MaintainsAltitude()
-        {
-            var gravity = new Vector3(0, -9.81f, 0);
-            var context = CreateContextWithGravity(gravity);
-            var start = new Vector3D(0, 100, 0);
-            var end = new Vector3D(500, 100, 0);
-            var pathOutput = new List<Vector3D>();
-
-            bool result = _manager.GenerateCompletePath(ref start, ref end, context, pathOutput);
+            var result = manager.GetNextWaypoint(ref Vector3D.Zero, out waypoint);
 
             Assert.IsTrue(result);
-
-            // Verify altitude maintenance
-            foreach (var waypoint in pathOutput)
-            {
-                Assert.IsTrue(waypoint.Y >= start.Y - 20,
-                    "Path should maintain altitude in gravity");
-            }
         }
-
-        [TestMethod]
-        public void GetNextWaypoint_BelowSafeAltitude_LiftsWaypoint()
-        {
-            var gravity = new Vector3(0, -9.81f, 0);
-            var context = CreateContextWithGravity(gravity);
-
-            var start = new Vector3D(0, 30, 0); // Below min altitude buffer
-            var end = new Vector3D(100, 30, 0);
-
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            Assert.IsTrue(result);
-            // Waypoint should be adjusted for safe altitude
-            Assert.IsTrue(waypoint.Y >= start.Y || waypoint == end,
-                "Waypoint should be at or above start altitude");
-        }
-
-        [TestMethod]
-        public void GetNextWaypoint_VeryShortDistance_ReturnsTarget()
-        {
-            var context = CreateBasicContext();
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(10, 0, 0); // Less than min waypoint distance
-
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            Assert.IsTrue(result);
-            Assert.AreEqual(end, waypoint, "Very short distance should return target directly");
-        }
-
-        [TestMethod]
-        public void GetNextWaypoint_ComplexityExceedsLimit_FallsBackToDirect()
-        {
-            _config.maxPathNodes = 10; // Very low limit
-            _manager = new PathfindingManager(_config);
-
-            var context = CreateBasicContext();
-            context.SensorInfos = new List<PathfindingContext.SensorInfo>
-            {
-                new PathfindingContext.SensorInfo
-                {
-                    Sensor = SEMockFactory.CreateMockSensor(new Vector3D(0, 0, 0), 50f),
-                    Position = new Vector3D(0, 0, 0),
-                    MaxRange = 50f
-                }
-            };
-
-            var start = new Vector3D(0, 0, 0);
-            var end = new Vector3D(10000, 0, 0); // Very long distance
-
-            Vector3D waypoint;
-            bool result = _manager.GetNextWaypoint(ref start, ref end, context, out waypoint);
-
-            // Should fall back to direct pathfinder due to complexity
-            Assert.IsTrue(result, "Should fall back when complexity exceeds limit");
-        }
-
-        #region Helper Methods
-
-        private PathfindingContext CreateBasicContext()
-        {
-            var controller = SEMockFactory.CreateMockController(new Vector3D(0, 0, 0));
-            var thrusters = CreateBasicThrusters();
-
-            return new PathfindingContext(
-                _config,
-                controller,
-                new List<IMySensorBlock>(),
-                new List<IMyCameraBlock>(),
-                thrusters,
-                1000f,
-                5000f,
-                50f,
-                Base6Directions.Direction.Forward,
-                new MockGamePruningStructureDelegate()
-            );
-        }
-
-        private PathfindingContext CreateContextWithGravity(Vector3 gravity)
-        {
-            var controller = SEMockFactory.CreateMockController(new Vector3D(0, 0, 0), gravity);
-            var thrusters = CreateBasicThrusters();
-
-            return new PathfindingContext(
-                _config,
-                controller,
-                new List<IMySensorBlock>(),
-                new List<IMyCameraBlock>(),
-                thrusters,
-                1000f,
-                5000f,
-                50f,
-                Base6Directions.Direction.Forward,
-                new MockGamePruningStructureDelegate(),
-                planetCenter: new Vector3D(0, -60000, 0),
-                planetRadius: 60000.0
-            );
-        }
-
-        private List<IMyThrust> CreateBasicThrusters()
-        {
-            return new List<IMyThrust>
-            {
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Forward, 100000f),
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Backward, 100000f),
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Up, 100000f),
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Down, 100000f),
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Left, 100000f),
-                SEMockFactory.CreateMockThruster(Base6Directions.Direction.Right, 100000f)
-            };
-        }
-
-        #endregion
     }
 }

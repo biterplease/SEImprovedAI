@@ -1,4 +1,5 @@
-﻿using ImprovedAI.Pathfinding;
+﻿using ImprovedAI.Config;
+using ImprovedAI.Pathfinding;
 using Moq;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
@@ -18,7 +19,6 @@ namespace ImprovedAI.Tests.TestUtil
 
             var context = new PathfindingContext
             {
-                // Configuration primitives
                 MinWaypointDistance = config.MinWaypointDistance(),
                 MaxWaypointDistance = config.MaxWaypointDistance(),
                 MinAltitudeBuffer = config.MinAltitudeBuffer(),
@@ -29,23 +29,19 @@ namespace ImprovedAI.Tests.TestUtil
                 UsePlanetAwarePathfinding = config.UsePlanetAwarePathfinding(),
                 AllowRepathing = config.AllowRepathing(),
 
-                // Controller state
                 ControllerPosition = position,
                 ControllerWorldMatrix = MatrixD.CreateTranslation(position),
                 ControllerForwardDirection = Base6Directions.Direction.Forward,
 
-                // Environmental data
                 GravityVector = gravity,
                 IsInPlanetGravity = gravity.LengthSquared() > 0.1,
                 PlanetCenter = null,
                 PlanetRadius = 0,
 
-                // Ship capabilities
                 ShipMass = 1000f,
                 MaxLoad = 1.0f,
                 WaypointDistance = config.MaxWaypointDistance(),
 
-                // Initialize lists
                 Sensors = new List<PathfindingContext.SensorData>(),
                 Cameras = new List<PathfindingContext.CameraData>(),
                 TraveledNodes = new List<Vector3D>(),
@@ -55,7 +51,6 @@ namespace ImprovedAI.Tests.TestUtil
                 NeighborBuffer = new List<Vector3I>()
             };
 
-            // Calculate thrust data
             context.ThrustData.Forward = 100000f;
             context.ThrustData.Backward = 100000f;
             context.ThrustData.Up = 100000f;
@@ -73,25 +68,44 @@ namespace ImprovedAI.Tests.TestUtil
             context.IsInPlanetGravity = true;
         }
 
-        public static MyEntity CreateMockObstacle(Vector3D position, double size = 10.0)
+  
+        public static PathfindingManager CreateMockManager(
+            IPathfindingConfig config = null,
+            MockGamePruningStructureDelegate pruning = null,
+            MockPlanetDelegate planet = null)
         {
-            var entityMock = new Mock<MyEntity>();
-            var positionCompMock = new Mock<MyPositionComponentBase>();
+            config = config ?? new FakePathfindingConfig();
+            pruning = pruning ?? new MockGamePruningStructureDelegate();
+            planet = planet ?? new MockPlanetDelegate();
 
-            positionCompMock.Setup(p => p.GetPosition()).Returns(position);
+            return new PathfindingManager(config, pruning, planet);
+        }
 
-            var boundingBox = new BoundingBoxD(
-                position - new Vector3D(size / 2),
-                position + new Vector3D(size / 2)
-            );
-            positionCompMock.Setup(p => p.WorldAABB).Returns(boundingBox);
+        public static void SetupManagerComponents(
+            PathfindingManager manager,
+            IMyShipController controller,
+            IMyCubeGrid grid = null,
+            List<IMyThrust> thrusters = null,
+            List<IMySensorBlock> sensors = null,
+            List<IMyCameraBlock> cameras = null)
+        {
+            if (controller != null)
+                manager.ControllerChanged(controller);
 
-            entityMock.Setup(e => e.PositionComp).Returns(positionCompMock.Object);
-            entityMock.Setup(e => e.EntityId).Returns((long)(position.X + position.Y + position.Z));
+            if (grid != null)
+                manager.GridChanged(grid);
 
-            return entityMock.Object;
+            if (thrusters != null)
+                manager.ThrustersChanged(thrusters);
+
+            if (sensors != null)
+                manager.SensorsChanged(sensors);
+
+            if (cameras != null)
+                manager.CamerasChanged(cameras);
         }
     }
+
 
     public class MockGamePruningStructureDelegate : IMyGamePruningStructureDelegate
     {

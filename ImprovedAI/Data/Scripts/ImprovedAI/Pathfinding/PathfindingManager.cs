@@ -736,7 +736,7 @@ namespace ImprovedAI.Pathfinding
             LineD ray = new LineD(request.RaycastStart, end);
 
             raycastBuffer.Clear();
-            pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, raycastBuffer);
+            pruningStructure.GetLineIntersection(ref ray, raycastBuffer);
 
             // Check for obstacles
             bool hasObstacle = false;
@@ -778,7 +778,7 @@ namespace ImprovedAI.Pathfinding
             normalizedDir.Normalize();
             context.RaycastCache.Add(normalizedDir);
 
-            return hasObstacle;
+            return true;
         }
 
         /// <summary>
@@ -789,7 +789,7 @@ namespace ImprovedAI.Pathfinding
             raycastBuffer.Clear();
 
             LineD ray = new LineD(start, end);
-            pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, raycastBuffer);
+            pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, raycastBuffer, MyEntityQueryType.Both);
 
             for (int i = 0; i < raycastBuffer.Count; i++)
             {
@@ -832,6 +832,8 @@ namespace ImprovedAI.Pathfinding
 
         private void RebuildControllerContext()
         {
+            if (controllerEntityId == 0) return; // No controller set
+
             context.ControllerPosition = controllerState.Position;
             context.ControllerWorldMatrix = controllerState.WorldMatrix;
             context.ControllerForwardDirection = Base6Directions.Direction.Forward;
@@ -839,6 +841,8 @@ namespace ImprovedAI.Pathfinding
 
         private void RebuildEnvironmentContext()
         {
+            if (controllerEntityId == 0) return; // No controller set
+
             context.GravityVector = controllerState.GravityVector;
             context.IsInPlanetGravity = context.GravityVector.LengthSquared() > 0.1;
 
