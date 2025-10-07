@@ -7,6 +7,15 @@ namespace ImprovedAI
     [ProtoContract(UseProtoMembersOnly = true)]
     public class Scheduler
     {
+        [Flags]
+        public enum ShareWith : byte
+        {
+            NoOne = 0,
+            Friends = 1,
+            Faction = 2,
+            Neutrals = 4,
+            Enemies = 8,
+        }
         [Flags,ProtoContract]
         public enum WorkModes : ushort
         {
@@ -150,6 +159,11 @@ namespace ImprovedAI
             // Order drone to self manage
             [ProtoEnum]
             BecomeStandAlone = 8192,
+            /// <summary>
+            /// Carry packed messages for other drones, logistics computers or schedulers.
+            /// </summary>
+            [ProtoEnum]
+            MessengerPigeon = 16384,
         }
         [Serializable, ProtoContract(UseProtoMembersOnly = true)]
         public class Task

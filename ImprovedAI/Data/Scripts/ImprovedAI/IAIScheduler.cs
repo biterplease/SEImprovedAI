@@ -416,6 +416,7 @@ namespace ImprovedAI
             try
             {
                 var allAntennas = new HashSet<IMyEntity>();
+
                 MyAPIGateway.Entities.GetEntities(allAntennas);
 
                 foreach (var antenna in allAntennas.Cast<IMyRadioAntenna>())

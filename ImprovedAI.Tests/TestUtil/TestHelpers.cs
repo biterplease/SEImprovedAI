@@ -3,7 +3,10 @@ using ImprovedAI.Pathfinding;
 using Moq;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
+using System;
 using System.Collections.Generic;
+using System.Reflection.Metadata.Ecma335;
+using System.Text;
 using VRage.Game.Components;
 using VRage.Game.Entity;
 using VRage.Game.ModAPI;
@@ -223,6 +226,20 @@ namespace ImprovedAI.Tests.TestUtil
             }
 
             return double.MaxValue;
+        }
+    }
+
+    public class MockMySessionDelegate : IMySessionDelegate
+    {
+        public int GameplayFrameCounter { get; set; }
+    }
+
+    public class MockMyUtilitiesDelegate : IMyUtilitiesDelegate
+    {
+        public string returnValue { get; set; }
+        public byte[] SerializeToBinary<T> (T obj)
+        {
+            return Encoding.ASCII.GetBytes(returnValue);
         }
     }
 }

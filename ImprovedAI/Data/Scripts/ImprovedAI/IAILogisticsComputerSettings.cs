@@ -17,27 +17,27 @@ namespace ImprovedAI
         /// If only Push is checked, it has the ability to get rid of unwanted items while not sharing the rest
         /// of the inventory.
         /// </summary>
-        public OperationMode OperationMode { get; set; }
-        public bool Enabled { get; set; }
+        public OperationMode OperationMode;
+        public bool Enabled;
         /// <summary>
         /// Push all inventory to the network.
         /// </summary>
-        public bool PushAllInventory { get; set; }
-        public float PushFrequencySeconds { get; set; }
-        public bool UseItemLimits { get; set; }
+        public bool PushAllInventory;
+        public float PushFrequencySeconds;
+        public bool UseItemLimits;
         /// <summary>
         /// Items exceeding these values will be automatically pushed to the Logistics Network.
         /// Requires OperationMode Push
         /// </summary>
-        public Inventory Limits { get; set; }
-        public Inventory IgnoreList { get; set; }
-        public bool SetRequests { get; set; }
+        public Inventory Limits;
+        public Inventory IgnoreList;
+        public bool SetRequests;
         /// <summary>
         /// The Logistics Computer will make sure these amounts are in storage at all times.
         /// Anything missing will be requested periodically.
         /// Requires operation mode Requester
         /// </summary>
-        public Inventory Requests { get; set; }
-        public float RequestPeriod { get; set; }
+        public Inventory Requests;
+        public float RequestPeriod;
     }
 }

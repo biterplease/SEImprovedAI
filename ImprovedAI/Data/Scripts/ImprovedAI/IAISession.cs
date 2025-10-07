@@ -1,6 +1,7 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Network;
 using ImprovedAI.Utils.Logging;
+using Sandbox.Game.World;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces;
 using Sandbox.ModAPI.Interfaces.Terminal;
@@ -36,6 +37,18 @@ namespace ImprovedAI
         public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
         public Dictionary<long, IAISchedulerBlock> AIDroneSchedulers = new Dictionary<long, IAISchedulerBlock>();
         public Dictionary<long, IAILogisticsComputerBlock> AILogisticsComputers = new Dictionary<long, IAILogisticsComputerBlock>();
+
+        /// <summary>
+        /// All components: steel plate, metal grid, etc.
+        /// For use in logistic computer list filters.
+        /// </summary>
+        public Dictionary<long, string> AllComponents;
+
+        /// <summary>
+        /// All components: steel plate, metal grid, etc.
+        /// For use in scheduler grind and weld list filters.
+        /// </summary>
+        public Dictionary<long, string> AllBlocks;
 
         public ServerConfig GetConfig()
         {
@@ -78,8 +91,10 @@ namespace ImprovedAI
 
                 Log.Info("Mod loaded successfully");
                 Log.Info("Update interval: {0} ticks", _updateInterval);
+                IAILogisticsComputerTerminalControls.DoOnce(ModContext);
 
                 //LogAllTerminalControlClasses();
+
 
                 isInitialized = true;
             }
@@ -88,6 +103,7 @@ namespace ImprovedAI
                 MyLog.Default.WriteLine($"ImprovedAI: Init exception: {ex}");
             }
         }
+
         //static void LogAllTerminalControlClasses()
         //{
 
@@ -267,6 +283,7 @@ namespace ImprovedAI
 
         public void RegisterDroneController(IAIDroneControllerBlock block)
         {
+
             if (block?.Entity != null)
             {
                 AIDroneControllers[block.Entity.EntityId] = block;

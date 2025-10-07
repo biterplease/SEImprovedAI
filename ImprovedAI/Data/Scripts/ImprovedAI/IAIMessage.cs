@@ -16,6 +16,7 @@ namespace ImprovedAI.Messages
         LOGISTIC_REQUEST,
         LOGISTIC_PUSH,
         SCHEDULER_FORWARD,
+        MAILMAN_FORWARD
     }
     /// <summary>
     /// Drone messages sent back to the scheduler.
@@ -91,5 +92,17 @@ namespace ImprovedAI.Messages
         /// </summary>
         [ProtoMember(6)]
         public bool IsStatic;
+    }
+    [ProtoContract]
+    public class RelayMessage<T> where T : class
+    {
+        [ProtoMember(1)]
+        public T Payload;
+        [ProtoMember(2)]
+        public long DestinationEntityId;
+        [ProtoMember(3)]
+        public ushort DestinationTopic;
+        [ProtoMember(4)]
+        public long OriginalSenderId;
     }
 }

@@ -736,7 +736,7 @@ namespace ImprovedAI.Pathfinding
             LineD ray = new LineD(request.RaycastStart, end);
 
             raycastBuffer.Clear();
-            pruningStructure.GetLineIntersection(ref ray, raycastBuffer);
+            pruningStructure.GetTopmostEntitiesOverlappingRay(ref ray, raycastBuffer);
 
             // Check for obstacles
             bool hasObstacle = false;

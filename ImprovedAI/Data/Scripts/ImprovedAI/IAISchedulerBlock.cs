@@ -177,7 +177,7 @@ namespace ImprovedAI
 
         private void ParseWorkModes(string value)
         {
-            workModes = WorkModes.None;
+            WorkModes workModes = 0;
             var modes = value.Split(',');
             foreach (var mode in modes)
             {

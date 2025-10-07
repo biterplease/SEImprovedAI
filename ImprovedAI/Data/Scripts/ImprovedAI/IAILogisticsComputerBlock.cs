@@ -28,12 +28,12 @@ namespace ImprovedAI
         {
             base.Init(objectBuilder);
             block = (IMyCubeBlock)Entity;
-            NeedsUpdate = MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
+            NeedsUpdate |= MyEntityUpdateEnum.BEFORE_NEXT_FRAME;
         }
         public override void UpdateOnceBeforeFrame()
         {
             base.UpdateOnceBeforeFrame();
-            IAILogisticsComputerTerminalControls.DoOnce(ModContext);
+
             block = (IMyCubeBlock)Entity;
             programmableBlock = (IMyProgrammableBlock)Entity;
 
@@ -44,7 +44,8 @@ namespace ImprovedAI
             if (MyAPIGateway.Multiplayer.IsServer) // serverside only to avoid network spam
             {
             }
-            NeedsUpdate = MyEntityUpdateEnum.EACH_FRAME | MyEntityUpdateEnum.EACH_10TH_FRAME;
+            NeedsUpdate |= MyEntityUpdateEnum.EACH_FRAME;
+            NeedsUpdate |= MyEntityUpdateEnum.EACH_10TH_FRAME;
         }
 
         public override void UpdateAfterSimulation()
