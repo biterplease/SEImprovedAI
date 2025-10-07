@@ -112,8 +112,37 @@ namespace ImprovedAI
         #endregion
 
         #region Fields - Navigation
-        private Vector3D currentTargetPosition;
+        private Vector3D taskPosition;
         private List<Vector3D> currentPath = new List<Vector3D>();
+        // Request next when within 100m
+        private const float WAYPOINT_LOOKAHEAD_DISTANCE = 100f;
+        private PathfindingManager pathfindingManager;
+        private Vector3D currentWaypoint;
+        private struct ThrustProfile
+        {
+            public float MaxThrustForward;
+            public float MaxThrustBackward;
+            public float MaxThrustUp;
+            public float MaxThrustDown;
+            public float MaxThrustLeft;
+            public float MaxThrustRight;
+
+            public float MaxAccelerationForward;  // m/s²
+            public float MaxAccelerationBackward;
+            public float MaxAccelerationUp;
+            public float MaxAccelerationDown;
+            public float MaxAccelerationLeft;
+            public float MaxAccelerationRight;
+        }
+
+        private ThrustProfile thrustProfile;
+        private bool thrustProfileValid = false;
+        private long lastThrustProfileUpdate = 0;
+        private const int THRUST_PROFILE_UPDATE_INTERVAL = 600; // frames
+
+        // Hover thrust state
+        private float currentHoverThrustPercentage = 0f;
+        private Base6Directions.Direction currentHoverDirection = Base6Directions.Direction.Up;
         #endregion
 
         #region Fields - Update Intervals
@@ -128,6 +157,18 @@ namespace ImprovedAI
         /// Gets whether the drone is enabled
         /// </summary>
         public bool IsEnabled => isEnabled;
+        #endregion
+
+        #region Fields - Tool Offsets
+        private struct ToolOffset
+        {
+            public Vector3D Offset;
+            public Base6Directions.Direction ApproachDirection; // Which direction this offset approaches from
+        }
+
+        private Vector3D connectorOffset;
+        private List<ToolOffset> weldOffsets = new List<ToolOffset>();
+        private List<ToolOffset> grindOffsets = new List<ToolOffset>();
         #endregion
 
         #region Lifecycle - Initialization
@@ -555,12 +596,189 @@ namespace ImprovedAI
 
             if (hasMinimumComponents)
             {
+                CalculateThrustProfile();
+                CalculateToolOffsets();
                 return true;
             }
 
             Log.Warning("DroneController {0} missing required components", entityId);
             return false;
         }
+
+        /// <summary>
+        /// Calculate offsets for connector, welders, and grinders relative to controller.
+        /// When added to a target waypoint, these offsets position the controller so the tool
+        /// reaches the exact target position.
+        /// </summary>
+        private void CalculateToolOffsets()
+        {
+            if (shipController == null)
+            {
+                Log.Warning("Drone {0}: Cannot calculate offsets without ship controller", entityId);
+                return;
+            }
+
+            Vector3D controllerPos = shipController.GetPosition();
+
+            // === CONNECTOR OFFSET ===
+            if (connector != null)
+            {
+                Vector3D connectorPos = connector.GetPosition();
+                MatrixD connectorMatrix = connector.WorldMatrix;
+
+                // Connectors dock backward, so we want to be 0.5m in front of the docking target
+                // The connector face is at connectorMatrix.Backward
+                Vector3D connectorFace = connectorMatrix.Backward;
+
+                // Vector from controller to connector
+                Vector3D controllerToConnector;
+                Vector3D.Subtract(ref connectorPos, ref controllerPos, out controllerToConnector);
+
+                // Add 0.5m offset in front of connector face
+                Vector3D frontOffset;
+                Vector3D.Multiply(ref connectorFace, 0.5, out frontOffset);
+
+                // Total offset: (controller to connector) + (0.5m in front)
+                Vector3D.Add(ref controllerToConnector, ref frontOffset, out connectorOffset);
+
+                Log.Verbose("Drone {0} connector offset: {1:F2}m", entityId, connectorOffset.Length());
+            }
+            else
+            {
+                connectorOffset = Vector3D.Zero;
+            }
+
+            // === WELDER OFFSETS ===
+            weldOffsets.Clear();
+            if (welder != null)
+            {
+                var welderDef = welder.SlimBlock?.BlockDefinition as MyShipWelderDefinition;
+                if (welderDef != null)
+                {
+                    CalculateToolActionOffsets(
+                        welder.GetPosition(),
+                        welder.WorldMatrix,
+                        welderDef.SensorOffset,
+                        welderDef.SensorRadius,
+                        ref controllerPos,
+                        weldOffsets);
+
+                    Log.Verbose("Drone {0} calculated {1} weld offsets", entityId, weldOffsets.Count);
+                }
+            }
+
+            // === GRINDER OFFSETS ===
+            grindOffsets.Clear();
+            if (grinder != null)
+            {
+                var grinderDef = grinder.SlimBlock?.BlockDefinition as MyShipGrinderDefinition;
+                if (grinderDef != null)
+                {
+                    CalculateToolActionOffsets(
+                        grinder.GetPosition(),
+                        grinder.WorldMatrix,
+                        grinderDef.SensorOffset,
+                        grinderDef.SensorRadius,
+                        ref controllerPos,
+                        grindOffsets);
+
+                    Log.Verbose("Drone {0} calculated {1} grind offsets", entityId, grindOffsets.Count);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculate the 5 approach offsets for a tool's action sphere
+        /// </summary>
+        private void CalculateToolActionOffsets(
+            Vector3D toolPos,
+            MatrixD toolMatrix,
+            float sensorOffsetLocal,
+            float sensorRadius,
+            ref Vector3D controllerPos,
+            List<ToolOffset> outputOffsets)
+        {
+            Vector3D toolForward = toolMatrix.Forward;
+            Vector3D sensorOffsetWorld;
+            Vector3D.Multiply(ref toolForward, (double)sensorOffsetLocal, out sensorOffsetWorld);
+
+            // Calculate sphere center in world space
+            Vector3D sphereCenter;
+            Vector3D.Add(ref toolPos, ref sensorOffsetWorld, out sphereCenter);
+
+            // Create coordinate system where +Z points from sphere center toward tool block center
+            Vector3D toTool;
+            Vector3D.Subtract(ref toolPos, ref sphereCenter, out toTool);
+            double toToolLength = toTool.Length();
+
+            if (toToolLength < 0.01)
+            {
+                // Sensor offset is zero, use tool's forward as reference
+                toTool = toolMatrix.Forward;
+            }
+            else
+            {
+                Vector3D.Divide(ref toTool, toToolLength, out toTool);
+            }
+
+            // Create orthonormal basis
+            Vector3D zAxis = toTool;
+            Vector3D xAxis = Vector3D.CalculatePerpendicularVector(zAxis);
+            Vector3D.Normalize(ref xAxis, out xAxis);
+            Vector3D yAxis;
+            Vector3D.Cross(ref zAxis, ref xAxis, out yAxis);
+
+            // Define 5 approach directions: -Z, -X, +X, -Y, +Y
+            Vector3D[] edgeDirections = new Vector3D[5];
+            Base6Directions.Direction[] approachDirs = new Base6Directions.Direction[5];
+
+            // -Z (back of sphere, away from tool)
+            Vector3D.Negate(ref zAxis, out edgeDirections[0]);
+            approachDirs[0] = Base6Directions.Direction.Backward;
+
+            // -X (left of sphere)
+            Vector3D.Negate(ref xAxis, out edgeDirections[1]);
+            approachDirs[1] = Base6Directions.Direction.Left;
+
+            // +X (right of sphere)
+            edgeDirections[2] = xAxis;
+            approachDirs[2] = Base6Directions.Direction.Right;
+
+            // -Y (bottom of sphere)
+            Vector3D.Negate(ref yAxis, out edgeDirections[3]);
+            approachDirs[3] = Base6Directions.Direction.Down;
+
+            // +Y (top of sphere)
+            edgeDirections[4] = yAxis;
+            approachDirs[4] = Base6Directions.Direction.Up;
+
+            // Calculate offset for each edge point
+            for (int i = 0; i < 5; i++)
+            {
+                // Edge point = sphere center + radius * direction
+                Vector3D radiusVector;
+                Vector3D.Multiply(ref edgeDirections[i], (double)sensorRadius, out radiusVector);
+
+                Vector3D edgePoint;
+                Vector3D.Add(ref sphereCenter, ref radiusVector, out edgePoint);
+
+                // Offset = -(edge point - controller)
+                // When added to target waypoint W, controller positions at W + offset,
+                // which places the edge point exactly at W
+                Vector3D controllerToEdge;
+                Vector3D.Subtract(ref edgePoint, ref controllerPos, out controllerToEdge);
+
+                Vector3D offset;
+                Vector3D.Negate(ref controllerToEdge, out offset);
+
+                outputOffsets.Add(new ToolOffset
+                {
+                    Offset = offset,
+                    ApproachDirection = approachDirs[i]
+                });
+            }
+        }
+
 
         /// <summary>
         /// Gets the forward direction of a block relative to the ship controller's orientation
@@ -707,6 +925,10 @@ namespace ImprovedAI
                     HandleReturningToBase();
                     break;
 
+                case Drone.State.AligningToHome:
+                    HandleAligningToHome();
+                    break;
+
                 case Drone.State.Docking:
                     HandleDocking();
                     break;
@@ -745,7 +967,7 @@ namespace ImprovedAI
         private void StartTask(Scheduler.Task task)
         {
             currentTaskId = (ushort)task.TaskId;
-            currentTargetPosition = task.Position;
+            taskPosition = task.Position;
 
             switch (task.TaskType)
             {
@@ -765,38 +987,6 @@ namespace ImprovedAI
                     Log.Warning("Drone {0} received unsupported task type: {1}", entityId, task.TaskType);
                     CompleteCurrentTask();
                     break;
-            }
-        }
-
-        private void HandleNavigating()
-        {
-            // Simple navigation - move towards target
-            var currentPos = shipController.GetPosition();
-            var distance = Vector3D.Distance(currentPos, currentTargetPosition);
-
-            if (distance < settings.WaypointTolerance)
-            {
-                // Arrived at target
-                if (currentTask != null)
-                {
-                    switch (currentTask.TaskType)
-                    {
-                        case Scheduler.TaskType.PreciseWelding:
-                        case Scheduler.TaskType.ScanWeld:
-                            currentState = Drone.State.Welding;
-                            break;
-
-                        case Scheduler.TaskType.PreciseGrinding:
-                        case Scheduler.TaskType.ScanGrind:
-                            currentState = Drone.State.Grinding;
-                            break;
-                    }
-                }
-            }
-            else
-            {
-                // Continue moving towards target
-                MoveToPosition(currentTargetPosition);
             }
         }
 
@@ -849,7 +1039,17 @@ namespace ImprovedAI
 
             if (distance < 10.0)
             {
-                currentState = Drone.State.Docking;
+                // Close enough to start orientation check
+                if (settings.EnforceHomeOrientation)
+                {
+                    currentState = Drone.State.AligningToHome;
+                    HandleAligningToHome();
+                    return;
+                }
+                else
+                {
+                    currentState = Drone.State.Docking;
+                }
             }
             else
             {
@@ -879,6 +1079,48 @@ namespace ImprovedAI
                     currentState = Drone.State.RechargingBattery;
                 else
                     currentState = Drone.State.Standby;
+            }
+        }
+
+        private void HandleAligningToHome()
+        {
+            // Calculate target position in home forward direction
+            Vector3D currentPos = shipController.GetPosition();
+            Vector3D homePos = settings.HomePosition;
+
+            // Create a target point in the home forward direction
+            Vector3D targetPoint;
+            Vector3D homeForward = settings.HomeForwardDirection;
+            Vector3D.Normalize(ref homeForward, out homeForward);
+
+            // Target is 100m in the home forward direction from home position
+            Vector3D offset;
+            Vector3D.Multiply(ref homeForward, 100.0, out offset);
+            Vector3D.Add(ref homePos, ref offset, out targetPoint);
+
+            // Check if already aligned
+            if (IsOrientedTowards(ref targetPoint))
+            {
+                // Aligned! Proceed to docking
+                currentState = Drone.State.Docking;
+                Log.Info("Drone {0} aligned to home orientation", entityId);
+            }
+            else
+            {
+                // Initiate rotation if not already rotating
+                if (!isRotating)
+                {
+                    bool rotationStarted = InitiateRotation(ref targetPoint);
+                    if (!rotationStarted)
+                    {
+                        Log.Warning("Drone {0} failed to start home alignment rotation", entityId);
+                        // Proceed to docking anyway
+                        currentState = Drone.State.Docking;
+                    }
+                }
+
+                // Hold position while rotating
+                MoveToPosition(currentPos); // Stay in place
             }
         }
 
@@ -1043,6 +1285,13 @@ namespace ImprovedAI
         {
             try
             {
+                var welderDef = welder.SlimBlock.BlockDefinition as MyShipWelderDefinition;
+                welder.SensorRadius;
+                welder.SensorOffset;
+                var grinderDef = grinder.SlimBlock?.BlockDefinition as MyShipGrinderDefinition;
+                grinderDef.SensorRadius;
+                grinderDef.SensorOffset;
+                var connectorDef = 
                 var def = gyro.SlimBlock?.BlockDefinition as MyGyroDefinition;
                 if (def != null)
                 {
@@ -1587,6 +1836,536 @@ namespace ImprovedAI
             }
         }
 
+        private void HandleNavigating()
+        {
+            Vector3D currentPos = shipController.GetPosition();
+
+            // Check if we need to update waypoint tracking (lookahead)
+            if (pathfindingManager.ShouldUpdateWaypointTracking(ref currentPos))
+            {
+                pathfindingManager.UpdateWaypointTracking(ref currentPos);
+            }
+
+            // Get current waypoint information
+            WaypointResponse waypointInfo = pathfindingManager.GetWaypointResponse();
+
+            if (waypointInfo == null)
+            {
+                // No waypoint yet, get first one
+                Vector3D waypoint;
+                if (pathfindingManager.GetNextWaypoint(ref currentPos, out waypoint))
+                {
+                    currentWaypoint = waypoint;
+                    waypointInfo = pathfindingManager.GetWaypointResponse();
+                }
+                else
+                {
+                    Log.Error("Failed to get waypoint");
+                    return;
+                }
+            }
+
+            // Calculate safe speed based on waypoint behavior
+            float targetSpeed = CalculateSafeSpeed(
+                ref currentPos,
+                ref waypointInfo.Position,
+                waypointInfo.SuggestedBehavior
+            );
+
+            // Apply thrust to move toward waypoint
+            ApplyNavigationalThrust(ref waypointInfo.Position, targetSpeed);
+
+            // Check if we've reached the waypoint
+            float distanceToWaypoint = (float)Vector3D.Distance(currentPos, waypointInfo.Position);
+
+            if (distanceToWaypoint < settings.WaypointTolerance)
+            {
+                // Reached waypoint
+                if (waypointInfo.IsLastWaypoint)
+                {
+                    // Arrived at destination
+                    currentState = Drone.State.Welding; // or appropriate task state
+                }
+                else
+                {
+                    // Advance to next waypoint
+                    pathfindingManager.AdvanceToNextWaypoint();
+
+                    // Get next waypoint
+                    Vector3D nextWaypoint;
+                    if (pathfindingManager.GetNextWaypoint(ref currentPos, out nextWaypoint))
+                    {
+                        currentWaypoint = nextWaypoint;
+                    }
+                }
+            }
+        }
+
+        #region Thrust Management
+
+        /// <summary>
+        /// Calculate safe speed based on waypoint behavior and stopping distance
+        /// </summary>
+        private float CalculateSafeSpeed(
+            ref Vector3D currentPos,
+            ref Vector3D waypointPos,
+            WaypointBehavior behavior)
+        {
+            // Get base speed from behavior
+            float targetSpeed;
+            switch (behavior)
+            {
+                case WaypointBehavior.RunThrough:
+                    targetSpeed = settings.SpeedLimit;
+                    break;
+                case WaypointBehavior.SlowApproach:
+                    targetSpeed = settings.ApproachSpeed;
+                    break;
+                case WaypointBehavior.FullStop:
+                    targetSpeed = 0f;
+                    break;
+                default:
+                    targetSpeed = settings.SpeedLimit;
+                    break;
+            }
+
+            // Calculate distance to waypoint
+            Vector3D distanceVector;
+            Vector3D.Subtract(ref waypointPos, ref currentPos, out distanceVector);
+            float distance = (float)distanceVector.Length();
+
+            // Get current speed
+            float currentSpeed = (float)shipController.GetShipVelocities().LinearVelocity.Length();
+
+            // Calculate stopping distance at current speed
+            float stoppingDistance = CalculateStoppingDistance(currentSpeed);
+
+            // If we can't stop in time, reduce speed (80% safety margin)
+            if (stoppingDistance > distance * 0.8f)
+            {
+                // Calculate max safe speed: v = sqrt(2 * a * s)
+                float maxDeceleration = GetMaxDecelerationForCurrentVelocity();
+                if (maxDeceleration > 0.1f)
+                {
+                    float safeSpeed = (float)Math.Sqrt(2.0 * maxDeceleration * distance * 0.8f);
+                    targetSpeed = Math.Min(targetSpeed, safeSpeed);
+                }
+                else
+                {
+                    // Can't decelerate properly, use docking speed as fallback
+                    targetSpeed = settings.DockingSpeed;
+                }
+            }
+
+            return targetSpeed;
+        }
+
+        /// <summary>
+        /// Calculate thrust profile from current thrusters and mass
+        /// </summary>
+        private void CalculateThrustProfile()
+        {
+            if (shipController == null || currentMass < 0.1f)
+            {
+                thrustProfileValid = false;
+                return;
+            }
+
+            // Sum thrust for each direction
+            thrustProfile.MaxThrustForward = 0f;
+            thrustProfile.MaxThrustBackward = 0f;
+            thrustProfile.MaxThrustUp = 0f;
+            thrustProfile.MaxThrustDown = 0f;
+            thrustProfile.MaxThrustLeft = 0f;
+            thrustProfile.MaxThrustRight = 0f;
+
+            foreach (var kvp in thrusters)
+            {
+                float directionThrust = 0f;
+
+                foreach (var thruster in kvp.Value)
+                {
+                    if (thruster.IsWorking && thruster.IsFunctional)
+                        directionThrust += thruster.MaxEffectiveThrust;
+                }
+
+                switch (kvp.Key)
+                {
+                    case Base6Directions.Direction.Forward:
+                        thrustProfile.MaxThrustForward = directionThrust;
+                        break;
+                    case Base6Directions.Direction.Backward:
+                        thrustProfile.MaxThrustBackward = directionThrust;
+                        break;
+                    case Base6Directions.Direction.Up:
+                        thrustProfile.MaxThrustUp = directionThrust;
+                        break;
+                    case Base6Directions.Direction.Down:
+                        thrustProfile.MaxThrustDown = directionThrust;
+                        break;
+                    case Base6Directions.Direction.Left:
+                        thrustProfile.MaxThrustLeft = directionThrust;
+                        break;
+                    case Base6Directions.Direction.Right:
+                        thrustProfile.MaxThrustRight = directionThrust;
+                        break;
+                }
+            }
+
+            // Calculate accelerations: a = F / m
+            thrustProfile.MaxAccelerationForward = thrustProfile.MaxThrustForward / currentMass;
+            thrustProfile.MaxAccelerationBackward = thrustProfile.MaxThrustBackward / currentMass;
+            thrustProfile.MaxAccelerationUp = thrustProfile.MaxThrustUp / currentMass;
+            thrustProfile.MaxAccelerationDown = thrustProfile.MaxThrustDown / currentMass;
+            thrustProfile.MaxAccelerationLeft = thrustProfile.MaxThrustLeft / currentMass;
+            thrustProfile.MaxAccelerationRight = thrustProfile.MaxThrustRight / currentMass;
+
+            thrustProfileValid = true;
+            lastThrustProfileUpdate = MyAPIGateway.Session.GameplayFrameCounter;
+
+            Log.Verbose("Drone {0} thrust profile updated - Mass: {1:F0}kg, MaxAccel: F:{2:F1} B:{3:F1} U:{4:F1} D:{5:F1}",
+                entityId, currentMass,
+                thrustProfile.MaxAccelerationForward,
+                thrustProfile.MaxAccelerationBackward,
+                thrustProfile.MaxAccelerationUp,
+                thrustProfile.MaxAccelerationDown);
+        }
+
+        /// <summary>
+        /// Update hover thrust to counteract gravity
+        /// </summary>
+        private void UpdateHoverThrust()
+        {
+            // Update gravity vector
+            gravityVector = shipController.GetNaturalGravity();
+            double gravityLengthSq = gravityVector.LengthSquared();
+
+            if (gravityLengthSq < 0.1)
+            {
+                // No gravity - clear hover thrust
+                if (currentHoverThrustPercentage > 0f)
+                {
+                    ClearHoverThrust();
+                }
+                return;
+            }
+
+            double gravityLength = Math.Sqrt(gravityLengthSq);
+
+            // Force needed: F = m * g
+            float hoverForceRequired = currentMass * (float)gravityLength;
+
+            // Get upward direction (opposite of gravity)
+            Vector3D upDirection;
+            Vector3D.Negate(ref gravityVector, out upDirection);
+            Vector3D.Normalize(ref upDirection, out upDirection);
+
+            // Find which thruster direction provides upward thrust
+            MatrixD worldMatrix = shipController.WorldMatrix;
+            Base6Directions.Direction upThrustDirection = GetDirectionMostAlignedWith(ref upDirection, ref worldMatrix);
+
+            // Get thrusters for this direction
+            var upThrusters = thrusters[upThrustDirection];
+            if (upThrusters.Count == 0)
+            {
+                Log.Warning("Drone {0} has no thrusters to counteract gravity in direction {1}",
+                    entityId, upThrustDirection);
+                return;
+            }
+
+            // Calculate total available thrust
+            float totalUpThrust = 0f;
+            foreach (var thruster in upThrusters)
+            {
+                if (thruster.IsWorking && thruster.IsFunctional)
+                    totalUpThrust += thruster.MaxEffectiveThrust;
+            }
+
+            if (totalUpThrust < 0.1f)
+            {
+                Log.Warning("Drone {0} has no functional thrusters for gravity compensation", entityId);
+                return;
+            }
+
+            // Calculate required thrust percentage
+            float thrustPercentage = MathHelper.Clamp(hoverForceRequired / totalUpThrust, 0f, 1f);
+
+            // Warn if insufficient thrust
+            if (thrustPercentage > 0.95f)
+            {
+                Log.Warning("Drone {0} requires {1:F1}% thrust just to hover - insufficient thrust margin",
+                    entityId, thrustPercentage * 100f);
+            }
+
+            // Apply hover thrust
+            foreach (var thruster in upThrusters)
+            {
+                if (thruster.IsWorking && thruster.IsFunctional)
+                    thruster.ThrustOverridePercentage = thrustPercentage;
+            }
+
+            currentHoverThrustPercentage = thrustPercentage;
+            currentHoverDirection = upThrustDirection;
+        }
+
+        /// <summary>
+        /// Clear hover thrust from all thrusters
+        /// </summary>
+        private void ClearHoverThrust()
+        {
+            if (currentHoverDirection == Base6Directions.Direction.Forward)
+                return; // No hover thrust active
+
+            var hoverThrusters = thrusters[currentHoverDirection];
+            foreach (var thruster in hoverThrusters)
+            {
+                thruster.ThrustOverridePercentage = 0f;
+            }
+
+            currentHoverThrustPercentage = 0f;
+            currentHoverDirection = Base6Directions.Direction.Forward;
+        }
+
+        /// <summary>
+        /// Apply navigational thrust to move toward target
+        /// </summary>
+        private void ApplyNavigationalThrust(ref Vector3D targetPosition, float targetSpeed)
+        {
+            // First ensure hover thrust is applied
+            UpdateHoverThrust();
+
+            // Get current state
+            Vector3D currentPos = shipController.GetPosition();
+            Vector3 currentVel = shipController.GetShipVelocities().LinearVelocity;
+
+            // Calculate direction to target
+            Vector3D directionVector;
+            Vector3D.Subtract(ref targetPosition, ref currentPos, out directionVector);
+
+            double distanceSq = directionVector.LengthSquared();
+            if (distanceSq < 0.01)
+                return; // Already at target
+
+            double distance = Math.Sqrt(distanceSq);
+
+            // Normalize direction
+            Vector3D targetDirection;
+            Vector3D.Divide(ref directionVector, distance, out targetDirection);
+
+            // Calculate desired velocity
+            Vector3D desiredVelocity;
+            Vector3D.Multiply(ref targetDirection, targetSpeed, out desiredVelocity);
+
+            // Calculate velocity error
+            Vector3D currentVelD = new Vector3D(currentVel.X, currentVel.Y, currentVel.Z);
+            Vector3D velocityError;
+            Vector3D.Subtract(ref desiredVelocity, ref currentVelD, out velocityError);
+
+            // Convert to local controller frame
+            MatrixD worldMatrix = shipController.WorldMatrix;
+            MatrixD inverseMatrix = MatrixD.Transpose(worldMatrix);
+
+            Vector3D localVelocityError;
+            Vector3D.TransformNormal(ref velocityError, ref inverseMatrix, out localVelocityError);
+
+            // Apply proportional control
+            const double THRUST_GAIN = 0.5; // Tune this value
+
+            // Decompose into controller axes
+            double forwardThrust = localVelocityError.Z * THRUST_GAIN;
+            double upThrust = localVelocityError.Y * THRUST_GAIN;
+            double rightThrust = localVelocityError.X * THRUST_GAIN;
+
+            // Apply thrust (these methods handle combining with hover thrust)
+            ApplyDirectionalThrustDelta(Base6Directions.Direction.Forward, forwardThrust);
+            ApplyDirectionalThrustDelta(Base6Directions.Direction.Up, upThrust);
+            ApplyDirectionalThrustDelta(Base6Directions.Direction.Right, rightThrust);
+        }
+
+        /// <summary>
+        /// Apply additional thrust in a direction (adds to existing override like hover thrust)
+        /// </summary>
+        private void ApplyDirectionalThrustDelta(Base6Directions.Direction direction, double thrustAmount)
+        {
+            // Determine forward or backward
+            Base6Directions.Direction actualDirection;
+            float absThrust = (float)Math.Abs(thrustAmount);
+
+            if (thrustAmount >= 0)
+            {
+                actualDirection = direction;
+            }
+            else
+            {
+                actualDirection = Base6Directions.GetOppositeDirection(direction);
+            }
+
+            // Get thrusters for this direction
+            var directionThrusters = thrusters[actualDirection];
+            if (directionThrusters.Count == 0)
+                return;
+
+            // Clamp thrust amount
+            absThrust = MathHelper.Clamp(absThrust, 0f, 1f);
+
+            // Apply thrust to all thrusters in this direction
+            foreach (var thruster in directionThrusters)
+            {
+                if (!thruster.IsWorking || !thruster.IsFunctional)
+                    continue;
+
+                // Get current override (may include hover thrust)
+                float currentOverride = thruster.ThrustOverridePercentage;
+
+                // Add navigational thrust
+                float combinedThrust = MathHelper.Clamp(currentOverride + absThrust, 0f, 1f);
+
+                thruster.ThrustOverridePercentage = combinedThrust;
+            }
+        }
+
+        /// <summary>
+        /// Get the direction most aligned with a world vector
+        /// </summary>
+        private Base6Directions.Direction GetDirectionMostAlignedWith(
+            ref Vector3D worldDirection,
+            ref MatrixD worldMatrix)
+        {
+            // Cache basis vectors
+            Vector3D forward = worldMatrix.Forward;
+            Vector3D backward = worldMatrix.Backward;
+            Vector3D up = worldMatrix.Up;
+            Vector3D down = worldMatrix.Down;
+            Vector3D left = worldMatrix.Left;
+            Vector3D right = worldMatrix.Right;
+
+            // Calculate dot products (temp variables)
+            double dotForward, dotBackward, dotUp, dotDown, dotLeft, dotRight;
+            Vector3D.Dot(ref worldDirection, ref forward, out dotForward);
+            Vector3D.Dot(ref worldDirection, ref backward, out dotBackward);
+            Vector3D.Dot(ref worldDirection, ref up, out dotUp);
+            Vector3D.Dot(ref worldDirection, ref down, out dotDown);
+            Vector3D.Dot(ref worldDirection, ref left, out dotLeft);
+            Vector3D.Dot(ref worldDirection, ref right, out dotRight);
+
+            // Find maximum alignment
+            double maxDot = dotForward;
+            Base6Directions.Direction result = Base6Directions.Direction.Forward;
+
+            if (dotBackward > maxDot) { maxDot = dotBackward; result = Base6Directions.Direction.Backward; }
+            if (dotUp > maxDot) { maxDot = dotUp; result = Base6Directions.Direction.Up; }
+            if (dotDown > maxDot) { maxDot = dotDown; result = Base6Directions.Direction.Down; }
+            if (dotLeft > maxDot) { maxDot = dotLeft; result = Base6Directions.Direction.Left; }
+            if (dotRight > maxDot) { maxDot = dotRight; result = Base6Directions.Direction.Right; }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Calculate stopping distance at current speed
+        /// </summary>
+        private float CalculateStoppingDistance(float currentSpeed)
+        {
+            if (!thrustProfileValid)
+                return float.MaxValue;
+
+            // Get current movement direction
+            Vector3 velocity = shipController.GetShipVelocities().LinearVelocity;
+            if (velocity.LengthSquared() < 0.01f)
+                return 0f;
+
+            // Get deceleration capability (opposite of movement direction)
+            float maxDeceleration = GetMaxDecelerationForCurrentVelocity();
+
+            if (maxDeceleration < 0.1f)
+                return float.MaxValue; // Can't decelerate
+
+            // s = v² / (2a)
+            return (currentSpeed * currentSpeed) / (2f * maxDeceleration);
+        }
+
+        /// <summary>
+        /// Calculate max speed for a given stopping distance
+        /// </summary>
+        private float CalculateMaxSpeedForDistance(float distance)
+        {
+            if (!thrustProfileValid)
+                return 0f;
+
+            float maxDeceleration = GetMaxDecelerationForCurrentVelocity();
+
+            if (maxDeceleration < 0.1f)
+                return 0f;
+
+            // v = sqrt(2 * a * s)
+            return (float)Math.Sqrt(2.0 * maxDeceleration * distance);
+        }
+
+        /// <summary>
+        /// Get maximum deceleration capability in current velocity direction
+        /// </summary>
+        private float GetMaxDecelerationForCurrentVelocity()
+        {
+            Vector3 velocity = shipController.GetShipVelocities().LinearVelocity;
+            if (velocity.LengthSquared() < 0.01f)
+                return thrustProfile.MaxAccelerationForward; // Default
+
+            // Convert velocity to local frame
+            Vector3D velocityD = new Vector3D(velocity.X, velocity.Y, velocity.Z);
+            MatrixD worldMatrix = shipController.WorldMatrix;
+            MatrixD inverseMatrix = MatrixD.Transpose(worldMatrix);
+
+            Vector3D localVelocity;
+            Vector3D.TransformNormal(ref velocityD, ref inverseMatrix, out localVelocity);
+
+            // Determine primary movement direction and get opposing thrust
+            double absX = Math.Abs(localVelocity.X);
+            double absY = Math.Abs(localVelocity.Y);
+            double absZ = Math.Abs(localVelocity.Z);
+
+            if (absZ > absX && absZ > absY)
+            {
+                // Moving primarily forward/backward
+                return localVelocity.Z > 0 ?
+                    thrustProfile.MaxAccelerationBackward :
+                    thrustProfile.MaxAccelerationForward;
+            }
+            else if (absY > absX)
+            {
+                // Moving primarily up/down
+                return localVelocity.Y > 0 ?
+                    thrustProfile.MaxAccelerationDown :
+                    thrustProfile.MaxAccelerationUp;
+            }
+            else
+            {
+                // Moving primarily left/right
+                return localVelocity.X > 0 ?
+                    thrustProfile.MaxAccelerationLeft :
+                    thrustProfile.MaxAccelerationRight;
+            }
+        }
+
+        /// <summary>
+        /// Clear all thrust overrides
+        /// </summary>
+        private void ClearAllThrustOverrides()
+        {
+            foreach (var kvp in thrusters)
+            {
+                foreach (var thruster in kvp.Value)
+                {
+                    thruster.ThrustOverridePercentage = 0f;
+                }
+            }
+
+            currentHoverThrustPercentage = 0f;
+        }
+
+        #endregion
+
+
+
         #region Public API
         /// <summary>
         /// Sets the drone operation mode
@@ -1668,6 +2447,14 @@ namespace ImprovedAI
         {
             //MyAPIGateway.Multiplayer.SendMessageToServer()
         }
+
+        // User sets it by pointing the drone in desired direction
+        public void SetHomeOrientationToCurrent()
+        {
+            settings.HomePosition = shipController.GetPosition();
+            settings.HomeForwardDirection = shipController.WorldMatrix.Forward;
+            Log.Info("Drone {0} home orientation set to current", entityId);
+        }
         public override void MarkForClose()
         {
             try
@@ -1707,6 +2494,13 @@ namespace ImprovedAI
 
             base.MarkForClose();
         }
+        #endregion
+
+        #region Terminal Controls
+        // TODO: need a way to encode both GPS coords and orientation into one string
+        //public Vector3D Terminal_SetHome
+        //{
+        //}
         #endregion
     }
 }

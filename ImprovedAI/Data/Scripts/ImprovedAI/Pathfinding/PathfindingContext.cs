@@ -80,6 +80,60 @@ namespace ImprovedAI.Pathfinding
         public List<Vector3I> NeighborBuffer;
         public List<Vector3D> TraveledNodes;
 
+        // NEW: Waypoint tracking and lookahead
+        public WaypointHistory WaypointTracking;
+
+        /// <summary>
+        /// Waypoint history tracking for behavior calculation
+        /// </summary>
+        public struct WaypointHistory
+        {
+            public Vector3D? PreviousWaypoint;
+            public Vector3D? CurrentWaypoint;
+            public Vector3D? NextWaypoint;
+            public WaypointBehavior CurrentBehavior;
+            public float CurrentAlignmentAngle;
+            public bool NextWaypointRequested;
+            public float DistanceToCurrentWaypoint;
+
+            /// <summary>
+            /// Check if we have enough waypoint data for behavior calculation
+            /// </summary>
+            public bool CanCalculateBehavior()
+            {
+                return PreviousWaypoint.HasValue &&
+                       CurrentWaypoint.HasValue &&
+                       NextWaypoint.HasValue;
+            }
+
+            /// <summary>
+            /// Advance waypoint history (current becomes previous, next becomes current)
+            /// </summary>
+            public void AdvanceWaypoint()
+            {
+                PreviousWaypoint = CurrentWaypoint;
+                CurrentWaypoint = NextWaypoint;
+                NextWaypoint = null;
+                NextWaypointRequested = false;
+                CurrentBehavior = WaypointBehavior.RunThrough; // Default until recalculated
+                CurrentAlignmentAngle = 0f;
+            }
+
+            /// <summary>
+            /// Reset all waypoint tracking
+            /// </summary>
+            public void Reset()
+            {
+                PreviousWaypoint = null;
+                CurrentWaypoint = null;
+                NextWaypoint = null;
+                CurrentBehavior = WaypointBehavior.RunThrough;
+                CurrentAlignmentAngle = 0f;
+                NextWaypointRequested = false;
+                DistanceToCurrentWaypoint = 0f;
+            }
+        }
+
         /// <summary>
         /// Get surface altitude above planet if in gravity
         /// </summary>

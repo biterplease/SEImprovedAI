@@ -25,6 +25,8 @@ namespace ImprovedAI
             [ProtoEnum]
             ReturningToBase,
             [ProtoEnum]
+            AligningToHome,
+            [ProtoEnum]
             Docking,
             [ProtoEnum]
             RefuelingHydrogen,

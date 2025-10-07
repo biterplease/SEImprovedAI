@@ -10,6 +10,28 @@ using VRageMath;
 
 namespace ImprovedAI.Pathfinding
 {
+    public struct WaypointInfo
+    {
+        public Vector3D Position;
+        public WaypointBehavior Behavior;
+        public float SuggestedSpeed;
+        public float LookaheadDistance; // How far ahead to request next waypoint
+    }
+
+    public enum WaypointBehavior :byte
+    {
+        RunThrough,    // Green - maintain speed
+        SlowApproach,  // Yellow - reduce to approach speed
+        FullStop       // Red - stop briefly, then continue
+    }
+    public class WaypointResponse
+    {
+        public Vector3D Position;
+        public Vector3D? ApproximateNextPosition; // Estimated, even if not fully calculated
+        public WaypointBehavior SuggestedBehavior;
+        public float AlignmentAngle; // Degrees between prev->current->next
+        public bool IsLastWaypoint;
+    }
     /// <summary>
     /// Manages pathfinding operations with incremental component updates.
     /// Handles context building, caching, and obstacle avoidance.
@@ -93,6 +115,16 @@ namespace ImprovedAI.Pathfinding
         private Vector3D lastObstacleCheckPosition;
         private int framesSinceLastObstacleCheck;
         private const int OBSTACLE_CHECK_INTERVAL = 10; // frames
+        /// <summary>
+        /// Lookahead distance for requesting next waypoint
+        /// </summary>
+        private const float WAYPOINT_LOOKAHEAD_DISTANCE = 200f;
+
+        /// <summary>
+        /// Alignment angle thresholds for waypoint behavior
+        /// </summary>
+        private const float ALIGNMENT_RUNTHROUGH_THRESHOLD = 15.0f;
+        private const float ALIGNMENT_SLOWAPPROACH_THRESHOLD = 45.0f;
 
         // Disposed flag
         private bool isDisposed;
@@ -404,6 +436,9 @@ namespace ImprovedAI.Pathfinding
             hasTarget = true;
             currentWaypoint = null;
             needsRecalculation = false;
+
+            // Reset waypoint tracking for new path
+            context.WaypointTracking.Reset();
         }
 
         /// <summary>
@@ -606,6 +641,9 @@ namespace ImprovedAI.Pathfinding
             cachedNodes.Clear();
             currentWaypoint = null;
             needsRecalculation = false;
+
+            // Reset waypoint tracking
+            context.WaypointTracking.Reset();
         }
 
         /// <summary>
@@ -807,6 +845,195 @@ namespace ImprovedAI.Pathfinding
             return false;
         }
 
+        /// <summary>
+        /// Update waypoint distance tracking and check if lookahead is needed
+        /// </summary>
+        /// <param name="currentPosition">Current drone position</param>
+        public void UpdateWaypointTracking(ref Vector3D currentPosition)
+        {
+            if (isDisposed) return;
+            if (!context.WaypointTracking.CurrentWaypoint.HasValue) return;
+
+            // Calculate distance to current waypoint
+            Vector3D currentWaypoint = context.WaypointTracking.CurrentWaypoint.Value;
+            Vector3D distanceVector;
+            Vector3D.Subtract(ref currentWaypoint, ref currentPosition, out distanceVector);
+
+            context.WaypointTracking.DistanceToCurrentWaypoint = (float)distanceVector.Length();
+
+            // Check if we need to request next waypoint for lookahead
+            if (!context.WaypointTracking.NextWaypointRequested &&
+                context.WaypointTracking.DistanceToCurrentWaypoint <= WAYPOINT_LOOKAHEAD_DISTANCE)
+            {
+                // Request next waypoint
+                Vector3D nextWaypoint;
+                if (GetNextWaypoint(ref currentWaypoint, out nextWaypoint))
+                {
+                    context.WaypointTracking.NextWaypoint = nextWaypoint;
+                    context.WaypointTracking.NextWaypointRequested = true;
+
+                    // Calculate behavior if we have all three waypoints
+                    if (context.WaypointTracking.CanCalculateBehavior())
+                    {
+                        CalculateWaypointBehavior(ref context);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Calculate waypoint behavior based on alignment of previous, current, and next waypoints
+        /// </summary>
+        /// <param name="context">Pathfinding context containing waypoint history</param>
+        private void CalculateWaypointBehavior(ref PathfindingContext context)
+        {
+            if (!context.WaypointTracking.CanCalculateBehavior())
+            {
+                // Default to slow approach if we don't have all waypoints
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.SlowApproach;
+                context.WaypointTracking.CurrentAlignmentAngle = 90f; // Unknown
+                return;
+            }
+
+            // Cache waypoint values
+            Vector3D prevWaypoint = context.WaypointTracking.PreviousWaypoint.Value;
+            Vector3D currentWaypoint = context.WaypointTracking.CurrentWaypoint.Value;
+            Vector3D nextWaypoint = context.WaypointTracking.NextWaypoint.Value;
+
+            // Calculate incoming vector (previous -> current)
+            Vector3D incomingVector;
+            Vector3D.Subtract(ref currentWaypoint, ref prevWaypoint, out incomingVector);
+
+            // Normalize incoming vector
+            double incomingLengthSq = incomingVector.LengthSquared();
+            if (incomingLengthSq < 0.01)
+            {
+                // Waypoints too close, default to slow approach
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.SlowApproach;
+                context.WaypointTracking.CurrentAlignmentAngle = 0f;
+                return;
+            }
+
+            double incomingLength = Math.Sqrt(incomingLengthSq);
+            Vector3D incomingNormalized;
+            Vector3D.Divide(ref incomingVector, incomingLength, out incomingNormalized);
+
+            // Calculate outgoing vector (current -> next)
+            Vector3D outgoingVector;
+            Vector3D.Subtract(ref nextWaypoint, ref currentWaypoint, out outgoingVector);
+
+            // Normalize outgoing vector
+            double outgoingLengthSq = outgoingVector.LengthSquared();
+            if (outgoingLengthSq < 0.01)
+            {
+                // Waypoints too close, default to slow approach
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.SlowApproach;
+                context.WaypointTracking.CurrentAlignmentAngle = 0f;
+                return;
+            }
+
+            double outgoingLength = Math.Sqrt(outgoingLengthSq);
+            Vector3D outgoingNormalized;
+            Vector3D.Divide(ref outgoingVector, outgoingLength, out outgoingNormalized);
+
+            // Calculate dot product for angle
+            double dotProduct;
+            Vector3D.Dot(ref incomingNormalized, ref outgoingNormalized, out dotProduct);
+
+            // Clamp to valid range
+            dotProduct = MathHelper.Clamp(dotProduct, -1.0, 1.0);
+
+            // Calculate angle in radians, then convert to degrees
+            double angleRadians = Math.Acos(dotProduct);
+            double angleDegrees = angleRadians * (180.0 / Math.PI);
+
+            context.WaypointTracking.CurrentAlignmentAngle = (float)angleDegrees;
+
+            // Determine behavior based on angle
+            if (angleDegrees <= ALIGNMENT_RUNTHROUGH_THRESHOLD)
+            {
+                // Nearly straight path - maintain speed
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.RunThrough;
+            }
+            else if (angleDegrees <= ALIGNMENT_SLOWAPPROACH_THRESHOLD)
+            {
+                // Moderate turn - reduce to approach speed
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.SlowApproach;
+            }
+            else
+            {
+                // Sharp turn - full stop at waypoint
+                context.WaypointTracking.CurrentBehavior = WaypointBehavior.FullStop;
+            }
+
+            Log.Verbose("PathfindingManager: Waypoint behavior calculated - Angle: {0:F1}°, Behavior: {1}",
+                angleDegrees, context.WaypointTracking.CurrentBehavior);
+        }
+
+        /// <summary>
+        /// Advance to next waypoint (called when drone reaches current waypoint)
+        /// </summary>
+        public void AdvanceToNextWaypoint()
+        {
+            if (isDisposed) return;
+
+            context.WaypointTracking.AdvanceWaypoint();
+
+            // Recalculate behavior if we have the data
+            if (context.WaypointTracking.CanCalculateBehavior())
+            {
+                CalculateWaypointBehavior(ref context);
+            }
+        }
+
+        /// <summary>
+        /// Get current waypoint response with behavior information
+        /// </summary>
+        public WaypointResponse GetWaypointResponse()
+        {
+            if (isDisposed || !context.WaypointTracking.CurrentWaypoint.HasValue)
+                return null;
+
+            return new WaypointResponse
+            {
+                Position = context.WaypointTracking.CurrentWaypoint.Value,
+                ApproximateNextPosition = context.WaypointTracking.NextWaypoint,
+                SuggestedBehavior = context.WaypointTracking.CurrentBehavior,
+                AlignmentAngle = context.WaypointTracking.CurrentAlignmentAngle,
+                IsLastWaypoint = !hasTarget ||
+                    (Vector3D.DistanceSquared(context.WaypointTracking.CurrentWaypoint.Value, targetPosition) <
+                     context.MinWaypointDistance * context.MinWaypointDistance)
+            };
+        }
+
+        /// <summary>
+        /// Reset waypoint tracking (call when starting new path)
+        /// </summary>
+        public void ResetWaypointTracking()
+        {
+            if (isDisposed) return;
+
+            context.WaypointTracking.Reset();
+        }
+
+        /// <summary>
+        /// Check if waypoint tracking needs update based on distance
+        /// </summary>
+        /// <param name="currentPosition">Current drone position</param>
+        /// <returns>True if lookahead should be checked</returns>
+        public bool ShouldUpdateWaypointTracking(ref Vector3D currentPosition)
+        {
+            if (isDisposed) return false;
+            if (!context.WaypointTracking.CurrentWaypoint.HasValue) return false;
+
+            Vector3D currentWaypoint = context.WaypointTracking.CurrentWaypoint.Value;
+            double distanceSq = Vector3D.DistanceSquared(currentPosition, currentWaypoint);
+
+            // Update if within lookahead distance
+            return distanceSq <= (WAYPOINT_LOOKAHEAD_DISTANCE * WAYPOINT_LOOKAHEAD_DISTANCE);
+        }
+
+
         #endregion
 
         #region Context Building
@@ -828,6 +1055,10 @@ namespace ImprovedAI.Pathfinding
             context.TraveledNodes = new List<Vector3D>();
             context.KnownObstacles = new List<PathfindingContext.ObstacleData>();
             context.RaycastCache = new HashSet<Vector3D>();
+
+            // Initialize waypoint tracking
+            context.WaypointTracking = new PathfindingContext.WaypointHistory();
+            context.WaypointTracking.Reset();
         }
 
         private void RebuildControllerContext()

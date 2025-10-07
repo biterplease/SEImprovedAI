@@ -1,6 +1,7 @@
 ﻿using static ImprovedAI.Drone;
 using ProtoBuf;
-using VRageMath; // Assuming you are using ProtoBuf for serialization
+using VRageMath;
+using VRage.Game.ModAPI; // Assuming you are using ProtoBuf for serialization
 
 namespace ImprovedAI
 {
@@ -22,7 +23,11 @@ namespace ImprovedAI
         /// WARNING: if this connector is set as home to more than one drone, may have catastrophic consequences.
         /// </summary>
         [ProtoMember(3)]
-        public Vector3D HomeConnector;
+        public Vector3D HomePosition;
+        public Vector3D HomeForwardDirection  = Vector3D.Forward;
+        public bool EnforceHomeOrientation = true;
+        [ProtoMember(24)]
+        public IMyGps HomeIsRelativeTo;
         /// <summary>
         /// Normally drones handle all tasks that they are capable for.
         /// If enabled, will allow the user to filter specific task types that this drone will be allowed to handle.
