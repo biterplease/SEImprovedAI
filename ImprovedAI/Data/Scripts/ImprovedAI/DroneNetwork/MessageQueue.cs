@@ -758,19 +758,8 @@ namespace ImprovedAI.VirtualNetwork
 
         public void TryPerformCleanup()
         {
-            var now = DateTime.UtcNow;
-            if (now - _lastCleanup < _cleanupInterval)
-                return;
-
-            lock (_cleanupLock)
-            {
-                if (now - _lastCleanup < _cleanupInterval)
-                    return;
-
-                _lastCleanup = now;
-                CleanupStaleMessages();
-                CleanupInvalidAntennas();
-            }
+            CleanupStaleMessages();
+            CleanupInvalidAntennas();
         }
 
         public int CleanupInvalidAntennas()

@@ -32,7 +32,7 @@ namespace ImprovedAI
 
         // _messageQueue
         private int messageQueueCleanupIntervalTicks;
-        private long lastMessageQueueCleanup = 0;
+        private int lastMessageQueueCleanupFrame = 0;
 
         // Collection of all AI blocks in the world
         public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
@@ -205,8 +205,15 @@ namespace ImprovedAI
                 }
 
                 var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
+                if ((currentFrame - lastMessageQueueCleanupFrame) > messageQueueCleanupIntervalTicks)
+                {
+                    lastMessageQueueCleanupFrame = currentFrame;
+                    _messageQueue.TryPerformCleanup();
+                }
                 if (currentFrame - _lastUpdateFrame < _updateInterval)
+                {
                     return;
+                }
 
                 _lastUpdateFrame = currentFrame;
 
