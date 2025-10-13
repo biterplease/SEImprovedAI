@@ -269,6 +269,8 @@ namespace ImprovedAI.VirtualNetwork
             Message<T> message,
             bool enforceCommsRange = false) where T : class, IMessagePayload
         {
+            if (_isShuttingDown)
+                return ErrorCode.ShutdownInProgress;
             if (message == null)
             {
                 return ErrorCode.MessageIsNull;
@@ -326,6 +328,8 @@ namespace ImprovedAI.VirtualNetwork
             Message<T> message,
             bool enforceCommsRange = false) where T : class, IMessagePayload
         {
+            if (_isShuttingDown)
+                return ErrorCode.ShutdownInProgress;
             if (message == null)
             {
                 return ErrorCode.MessageIsNull;
@@ -612,6 +616,8 @@ namespace ImprovedAI.VirtualNetwork
         public ErrorCode ReadMessages<T>(long subscriberId, IMyRadioAntenna subscriberAntenna, Channel channel, List<T> outMessages, int maxMessages = 10, bool clear = true)
             where T : class, IMessagePayload
         {
+            if (_isShuttingDown)
+                return ErrorCode.ShutdownInProgress;
             MyConcurrentHashSet<long> subscribers;
             if (!_channelSubscribers.TryGetValue(channel, out subscribers) || !subscribers.Contains(subscriberId))
                 return ErrorCode.NotSubscribed;
@@ -968,6 +974,7 @@ namespace ImprovedAI.VirtualNetwork
         }
         public void PrepareForShutdown()
         {
+            antennaTree.Clear();
             _isShuttingDown = true;
         }
 

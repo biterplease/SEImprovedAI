@@ -22,7 +22,8 @@ namespace ImprovedAI.VirtualNetwork
         RecipientNotFound = 1024,
         NotSubscribed = 2048,
         SubscriberAntennaNotRegistered = 4096,
-        SenderAntennaNotRegistered = 8192
+        SenderAntennaNotRegistered = 8192,
+        ShutdownInProgress = 16384,
     }
 
     //public class MessageResponse
