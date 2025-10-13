@@ -207,6 +207,7 @@ namespace ImprovedAI
                 var currentFrame = MyAPIGateway.Session.GameplayFrameCounter;
                 if ((currentFrame - lastMessageQueueCleanupFrame) > messageQueueCleanupIntervalTicks)
                 {
+                    Log.Info("performing message queue cleanup");
                     lastMessageQueueCleanupFrame = currentFrame;
                     _messageQueue.TryPerformCleanup();
                 }
