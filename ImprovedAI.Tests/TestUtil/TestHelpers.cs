@@ -1,5 +1,6 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Pathfinding;
+using ImprovedAI.VirtualNetwork;
 using Moq;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
@@ -237,9 +238,15 @@ namespace ImprovedAI.Tests.TestUtil
     public class MockMyUtilitiesDelegate : IMyUtilitiesDelegate
     {
         public string returnValue { get; set; }
+        public object returnObject { get; set; }
         public byte[] SerializeToBinary<T> (T obj)
         {
             return Encoding.ASCII.GetBytes(returnValue);
         }
+        public T SerializeFromBinary<T>(byte[] data) where T : class
+        {
+            return returnObject as T;
+        }
     }
+
 }

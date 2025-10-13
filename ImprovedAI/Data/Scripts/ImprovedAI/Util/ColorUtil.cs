@@ -2,7 +2,7 @@
 using VRage.Game.ModAPI;
 using VRageMath;
 
-namespace ImprovedAI.Utils
+namespace ImprovedAI.Util
 {
     public static class ColorUtil
     {

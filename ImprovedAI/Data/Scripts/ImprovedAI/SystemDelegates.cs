@@ -35,6 +35,9 @@ namespace ImprovedAI
     public interface IMyUtilitiesDelegate
     {
         byte[] SerializeToBinary<T>(T obj);
+        T SerializeFromBinary<T>(byte[] bytes);
+        string SerializeToXML<T>(T objectToSerialize);
+        T SerializeFromXML<T>(string buffer);
     }
 
     /// <summary>
@@ -44,9 +47,19 @@ namespace ImprovedAI
     {
         public byte[] SerializeToBinary<T>(T obj)
         {
-            {
-                return MyAPIGateway.Utilities.SerializeToBinary(obj);
-            }
+            return MyAPIGateway.Utilities.SerializeToBinary(obj);
+        }
+        public T SerializeFromBinary<T>(byte[] bytes)
+        {
+            return MyAPIGateway.Utilities.SerializeFromBinary<T>(bytes);
+        }
+        public string SerializeToXML<T>(T objectToSerialize)
+        {
+            return MyAPIGateway.Utilities.SerializeToXML<T>(objectToSerialize);
+        }
+        public T SerializeFromXML<T>(string buffer)
+        {
+            return MyAPIGateway.Utilities.SerializeFromXML<T>(buffer);
         }
     }
 }

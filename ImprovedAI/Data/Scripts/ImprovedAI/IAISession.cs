@@ -1,11 +1,7 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Network;
-using ImprovedAI.Utils.Logging;
-using Sandbox.Game.World;
+using ImprovedAI.Util.Logging;
+using ImprovedAI.VirtualNetwork;
 using Sandbox.ModAPI;
-using Sandbox.ModAPI.Interfaces;
-using Sandbox.ModAPI.Interfaces.Terminal;
-using SpaceEngineers.Game.ModAPI;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -22,7 +18,7 @@ namespace ImprovedAI
         private static ServerConfig _serverConfig;
 
         // Shared message queue for all AI components
-        public MessageQueue MessageQueue { get; private set; }
+        public MessageQueue _messageQueue { get; private set; }
 
         // Mod-wide settings and management
         private bool isInitialized = false;
@@ -32,6 +28,11 @@ namespace ImprovedAI
         private const int UPDATE_INTERVAL = 60;
         public static Guid ModGuid = new Guid("1CFDA990-FD26-4950-A127-7BBC99FF1397");
         public const string ModName = "ImprovedAI";
+        private const string MESSAGE_QUEUE_SNAPSHOT_FILE = "IAIMessageQueueSnapshot.dat";
+
+        // _messageQueue
+        private int messageQueueCleanupIntervalTicks;
+        private long lastMessageQueueCleanup = 0;
 
         // Collection of all AI blocks in the world
         public Dictionary<long, IAIDroneControllerBlock> AIDroneControllers = new Dictionary<long, IAIDroneControllerBlock>();
@@ -81,10 +82,18 @@ namespace ImprovedAI
                 Log.Initialize(ServerConfig.MOD_NAME, 0, "ImprovedAI.log", typeof(IAISession));
                 Log.Info("=== ImprovedAI Initializing ===");
 
-
-                MessageQueue = MessageQueue.Instance;
+                _messageQueue = MessageQueue.Instance;
                 _serverConfig = ServerConfig.Instance;
                 _serverConfig.LoadConfig();
+                if (MyAPIGateway.Utilities.FileExistsInWorldStorage(MESSAGE_QUEUE_SNAPSHOT_FILE, typeof(IAISession)))
+                {
+                    using (var reader = MyAPIGateway.Utilities.ReadBinaryFileInWorldStorage(MESSAGE_QUEUE_SNAPSHOT_FILE, typeof(IAISession)))
+                    {
+                        int length = reader.ReadInt32();
+                        byte[] data = reader.ReadBytes(length);
+                        _messageQueue.DeserializeAllMessages(data);
+                    }
+                }
                 Log.Info("Log level: {0}", _serverConfig.Logging.LogLevel.ToString());
 
                 _updateInterval = _serverConfig.Session.UpdateInterval;
@@ -103,6 +112,7 @@ namespace ImprovedAI
                 MyLog.Default.WriteLine($"ImprovedAI: Init exception: {ex}");
             }
         }
+
 
         //static void LogAllTerminalControlClasses()
         //{
@@ -320,16 +330,23 @@ namespace ImprovedAI
         {
             try
             {
+                // Reset message queue singleton
+                if (_messageQueue != null)
+                {
+                    var mqData = _messageQueue.SerializeForSave();
+                    using (var writer = MyAPIGateway.Utilities.WriteBinaryFileInWorldStorage(MESSAGE_QUEUE_SNAPSHOT_FILE, typeof(IAISession)))
+                    {
+                        writer.Write(mqData.Length);
+                        writer.Write(mqData);
+                    }
+                    _messageQueue.Reset();
+                }
+
                 // Clean shutdown
                 AIDroneControllers.Clear();
                 AIDroneSchedulers.Clear();
                 AILogisticsComputers.Clear();
 
-                // Reset message queue singleton
-                if (MessageQueue != null)
-                {
-                    MessageQueue.Reset();
-                }
 
                 // Remove localization texts
                 MyAPIGateway.Gui.GuiControlRemoved -= GuiControlRemoved;

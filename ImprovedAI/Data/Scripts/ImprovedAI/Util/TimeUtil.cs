@@ -1,12 +1,14 @@
-﻿using System;
+﻿using Sandbox.ModAPI;
+using System;
 
-namespace ImprovedAI.Utils
+namespace ImprovedAI.Util
 {
     public static class TimeUtil
     {
         public const float TICKS_PER_SECOND = 60.0f;
         public const float MILLISECONDS_PER_TICK = 1000.0f / TICKS_PER_SECOND; // 16.666... ms
         public const float TICKS_PER_MILLISECOND = TICKS_PER_SECOND / 1000.0f; // 0.06 ticks
+        public static DateTime Epoch = new DateTime(2020, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         public static float TickToSeconds(int ticks)
         {
             return ticks / TICKS_PER_SECOND;
@@ -47,6 +49,19 @@ namespace ImprovedAI.Utils
         public static TimeSpan TickToTimeSpan(int ticks)
         {
             return TimeSpan.FromMilliseconds(TickToMs(ticks));
+        }
+
+        public static ulong DateTimeToTimestamp(DateTime dateTime)
+        {
+            if (dateTime.Kind == DateTimeKind.Local)
+                dateTime = dateTime.ToUniversalTime();
+            TimeSpan tSpan = dateTime.Subtract(Epoch);
+            return (ulong)tSpan.TotalMilliseconds;
+        }
+        public static DateTime TimestampToDateTime(ulong timestamp)
+        {
+            TimeSpan timeSpan = TimeSpan.FromMilliseconds(timestamp);
+            return Epoch.Add(timeSpan);
         }
     }
 }

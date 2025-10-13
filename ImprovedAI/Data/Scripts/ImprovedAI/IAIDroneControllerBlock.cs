@@ -1,9 +1,8 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Messages;
-using ImprovedAI.Network;
+using ImprovedAI.VirtualNetwork;
 using ImprovedAI.Pathfinding;
-using ImprovedAI.Utils;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util;
+using ImprovedAI.Util.Logging;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Definitions;
 using Sandbox.Game.Entities.Blocks;
@@ -399,7 +398,7 @@ namespace ImprovedAI
                 // Subscribe to messages if managed by scheduler
                 if (operationMode == Drone.OperationMode.ManagedByScheduler)
                 {
-                    messaging.Subscribe(entityId, (ushort)MessageTopics.DRONE_TASK_ASSIGNMENT);
+                    messaging.Subscribe(entityId, (ushort)Channel.DRONE_TASK_ASSIGNMENT);
                     SendDroneRegistration();
                 }
 
@@ -1190,7 +1189,7 @@ namespace ImprovedAI
                 H2OperationalThreshold = settings.HydrogenOperationalThreshold
             };
 
-            messaging.SendMessage((ushort)MessageTopics.DRONE_REGISTRATION, report, entityId, requiresAck: false);
+            messaging.SendMessage((ushort)Channel.DRONE_REGISTRATION, report, entityId, requiresAck: false);
             Log.LogDroneNetwork("Drone {0} sent registration", entityId);
         }
 
@@ -1223,7 +1222,7 @@ namespace ImprovedAI
                 H2Level = currentH2Level
             };
 
-            messaging.SendMessage((ushort)MessageTopics.DRONE_REPORTS, report, entityId, requiresAck: false);
+            messaging.SendMessage(MessageQueue.Cha.DRONE_REPORTS, report, entityId, requiresAck: false);
         }
 
         private void SendTaskCompleteReport()
@@ -1235,13 +1234,13 @@ namespace ImprovedAI
                 TaskId = currentTaskId
             };
 
-            messaging.SendMessage((ushort)MessageTopics.DRONE_REPORTS, report, entityId, requiresAck: false);
+            messaging.SendMessage(MessageQueue.Cha.DRONE_REPORTS, report, entityId, requiresAck: false);
             Log.LogDroneOrders("Drone {0} completed task {1}", entityId, currentTaskId);
         }
 
         private void ReadTaskAssignments()
         {
-            var assignments = messaging.ReadMessages<TaskAssignment>(entityId, (ushort)MessageTopics.DRONE_TASK_ASSIGNMENT, 10);
+            var assignments = messaging.ReadMessages<TaskAssignment>(entityId, (ushort)Channel.DRONE_TASK_ASSIGNMENT, 10);
 
             foreach (var assignment in assignments)
             {
@@ -1256,23 +1255,23 @@ namespace ImprovedAI
             }
         }
 
-        private void ReadMailmanForwards()
-        {
-            // TODO: check if listeners in range
-            // if no return
-            // if yes, send messages
-            var relayMessages = messaging.ReadMessages<RelayMessage<Scheduler.Task>>(entityId, (ushort)MessageTopics.MAILMAN_FORWARD, 10);
+        //private void ReadMailmanForwards()
+        //{
+        //    // TODO: check if listeners in range
+        //    // if no return
+        //    // if yes, send messages
+        //    var relayMessages = messaging.ReadMessages<RelayMessage<Scheduler.Task>>(entityId, (ushort)Channel.MAILMAN_FORWARD, 10);
 
-            foreach (var relayMessage in relayMessages)
-            {
-                if (relayMessage.DestinationEntityId != entityId)
-                    continue;
+        //    foreach (var relayMessage in relayMessages)
+        //    {
+        //        if (relayMessage.DestinationEntityId != entityId)
+        //            continue;
 
-                Scheduler.Task task = relayMessage.Payload;
-                // send message
+        //        Scheduler.Task task = relayMessage.Payload;
+        //        // send message
 
-            }
-        }
+        //    }
+        //}
         #endregion
 
 
@@ -1285,13 +1284,6 @@ namespace ImprovedAI
         {
             try
             {
-                var welderDef = welder.SlimBlock.BlockDefinition as MyShipWelderDefinition;
-                welder.SensorRadius;
-                welder.SensorOffset;
-                var grinderDef = grinder.SlimBlock?.BlockDefinition as MyShipGrinderDefinition;
-                grinderDef.SensorRadius;
-                grinderDef.SensorOffset;
-                var connectorDef = 
                 var def = gyro.SlimBlock?.BlockDefinition as MyGyroDefinition;
                 if (def != null)
                 {

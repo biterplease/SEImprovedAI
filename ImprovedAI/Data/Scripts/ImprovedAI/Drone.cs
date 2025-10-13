@@ -8,7 +8,7 @@ namespace ImprovedAI
     public class Drone
     {
         [ProtoContract]
-        public enum State
+        public enum State : byte
         {
             [ProtoEnum]
             Initializing,
@@ -106,29 +106,29 @@ namespace ImprovedAI
 
 
         [ProtoMember(1)]
-        public long DroneId { get; set; }
+        public long DroneId;
         [ProtoMember(2)]
-        public Capabilities _Capabilities { get; set; }
+        public Capabilities _Capabilities;
         [ProtoMember(3)]
-        public State _State { get; set; }
+        public State _State;
         [ProtoMember(4)]
-        public float BatteryLevel { get; set; }
+        public float BatteryLevel;
         [ProtoMember(5)]
-        public float BatteryRechargeThreshold { get; set; }
+        public float BatteryRechargeThreshold;
         [ProtoMember(6)]
-        public float BatteryOperationalThreshold { get; set; }
+        public float BatteryOperationalThreshold;
         [ProtoMember(7)]
-        public float H2Level { get; set; }
+        public float H2Level;
         [ProtoMember(8)]
-        public float H2RefuelThreshold { get; set; }
+        public float H2RefuelThreshold;
         [ProtoMember(9)]
-        public float H2OperationalThreshold { get; set; }
+        public float H2OperationalThreshold;
         [ProtoMember(10)]
-        public bool IsOutOfRange { get; set; }
+        public bool IsOutOfRange;
         [ProtoMember(11)]
-        public DateTime LastSeenTime { get; set; }
+        public DateTime LastSeenTime;
         [ProtoMember(12)]
-        public DateTime LastReportTime { get; set; }
+        public DateTime LastReportTime;
             
         public Drone()
         {

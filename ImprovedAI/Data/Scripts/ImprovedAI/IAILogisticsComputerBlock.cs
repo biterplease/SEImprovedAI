@@ -1,6 +1,6 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Utils;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util;
+using ImprovedAI.Util.Logging;
 using Sandbox.Common.ObjectBuilders.Definitions;
 using Sandbox.ModAPI;
 using System;

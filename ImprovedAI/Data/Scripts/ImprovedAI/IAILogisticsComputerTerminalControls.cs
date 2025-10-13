@@ -1,6 +1,6 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Utils;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util;
+using ImprovedAI.Util.Logging;
 using Sandbox.Game.Localization;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces.Terminal;

@@ -18,6 +18,7 @@ namespace ImprovedAI
         public bool IsEnabled = false;
         [ProtoMember(2)]
         public OperationMode OperationMode = OperationMode.StandAlone;
+        public long managingScheduler;
         /// <summary>
         /// Drone will always return to this connector when no more tasks are assigned.
         /// WARNING: if this connector is set as home to more than one drone, may have catastrophic consequences.

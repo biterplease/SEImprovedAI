@@ -7,15 +7,16 @@ using VRage.Game.ModAPI;
 namespace ImprovedAI
 {
 
-    [Serializable,ProtoContract(UseProtoMembersOnly = true)]
+    [Serializable, ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
     public class Inventory
     {
-        public enum RequisitionType :byte
+        [Serializable, ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
+        public enum RequisitionType : byte
         {
             Push = 1,
             Pull = 2
         }
-        [ProtoContract]
+        [Serializable, ProtoContract(UseProtoMembersOnly = true, SkipConstructor = true)]
         public struct KVPair
         {
             [ProtoMember(1)]
@@ -34,7 +35,7 @@ namespace ImprovedAI
             inventory = new MyConcurrentList<KVPair>();
         }
 
-        public Inventory(Dictionary<string,int> inventory)
+        public Inventory(Dictionary<string, int> inventory)
         {
             this.inventory = new MyConcurrentList<KVPair>();
             foreach (var pair in inventory)
@@ -47,7 +48,7 @@ namespace ImprovedAI
             this.inventory = new MyConcurrentList<KVPair>();
             foreach (var pair in inventory)
             {
-                this.inventory.Add(new KVPair { Key = pair.Key, Value = pair.Value});
+                this.inventory.Add(new KVPair { Key = pair.Key, Value = pair.Value });
             }
         }
 
@@ -56,15 +57,12 @@ namespace ImprovedAI
         /// </summary>
         public int GetItemCount(string subtypeId)
         {
-            lock (_lock)
+            foreach (var pair in inventory)
             {
-                foreach (var pair in inventory)
-                {
-                    if (pair.Key == subtypeId)
-                        return pair.Value;
-                }
-                return 0;
+                if (pair.Key == subtypeId)
+                    return pair.Value;
             }
+            return 0;
         }
 
         /// <summary>
@@ -72,25 +70,23 @@ namespace ImprovedAI
         /// </summary>
         public void AddItem(string subtypeId, int amount)
         {
-            if (amount <= 0) return;
+            if (amount <= 0)
+                return;
 
-            lock (_lock)
+            // Find existing item
+            for (int i = 0; i < inventory.Count; i++)
             {
-                // Find existing item
-                for (int i = 0; i < inventory.Count; i++)
+                var pair = inventory[i];
+                if (pair.Key == subtypeId)
                 {
-                    var pair = inventory[i];
-                    if (pair.Key == subtypeId)
-                    {
-                        // Update existing item count
-                        inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value + amount };
-                        return;
-                    }
+                    // Update existing item count
+                    inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value + amount };
+                    return;
                 }
-
-                // Item doesn't exist, add new entry
-                inventory.Add(new KVPair { Key = subtypeId, Value = amount });
             }
+
+            // Item doesn't exist, add new entry
+            inventory.Add(new KVPair { Key = subtypeId, Value = amount });
         }
 
         /// <summary>
@@ -100,31 +96,28 @@ namespace ImprovedAI
         {
             if (items == null || items.Count == 0) return;
 
-            lock (_lock)
+            foreach (var item in items)
             {
-                foreach (var item in items)
+                if (item.Value <= 0) continue;
+
+                // Find existing item
+                bool found = false;
+                for (int i = 0; i < inventory.Count; i++)
                 {
-                    if (item.Value <= 0) continue;
-
-                    // Find existing item
-                    bool found = false;
-                    for (int i = 0; i < inventory.Count; i++)
+                    var pair = inventory[i];
+                    if (pair.Key == item.Key)
                     {
-                        var pair = inventory[i];
-                        if (pair.Key == item.Key)
-                        {
-                            // Update existing item count
-                            inventory[i] = new KVPair { Key = item.Key, Value = pair.Value + item.Value };
-                            found = true;
-                            break;
-                        }
+                        // Update existing item count
+                        inventory[i] = new KVPair { Key = item.Key, Value = pair.Value + item.Value };
+                        found = true;
+                        break;
                     }
+                }
 
-                    // Item doesn't exist, add new entry
-                    if (!found)
-                    {
-                        inventory.Add(new KVPair { Key = item.Key, Value = item.Value });
-                    }
+                // Item doesn't exist, add new entry
+                if (!found)
+                {
+                    inventory.Add(new KVPair { Key = item.Key, Value = item.Value });
                 }
             }
         }
@@ -136,37 +129,34 @@ namespace ImprovedAI
         {
             if (sourceInventory == null) return;
 
-            lock (_lock)
+            var items = new List<VRage.Game.ModAPI.Ingame.MyInventoryItem>();
+            sourceInventory.GetItems(items);
+
+            foreach (var item in items)
             {
-                var items = new List<VRage.Game.ModAPI.Ingame.MyInventoryItem>();
-                sourceInventory.GetItems(items);
+                var subtypeId = item.Type.SubtypeId;
+                var amount = (int)item.Amount; // Convert MyFixedPoint to int
 
-                foreach (var item in items)
+                if (amount <= 0) continue;
+
+                // Find existing item
+                bool found = false;
+                for (int i = 0; i < inventory.Count; i++)
                 {
-                    var subtypeId = item.Type.SubtypeId;
-                    var amount = (int)item.Amount; // Convert MyFixedPoint to int
-
-                    if (amount <= 0) continue;
-
-                    // Find existing item
-                    bool found = false;
-                    for (int i = 0; i < inventory.Count; i++)
+                    var pair = inventory[i];
+                    if (pair.Key == subtypeId)
                     {
-                        var pair = inventory[i];
-                        if (pair.Key == subtypeId)
-                        {
-                            // Update existing item count
-                            inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value + amount };
-                            found = true;
-                            break;
-                        }
+                        // Update existing item count
+                        inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value + amount };
+                        found = true;
+                        break;
                     }
+                }
 
-                    // Item doesn't exist, add new entry
-                    if (!found)
-                    {
-                        inventory.Add(new KVPair { Key = subtypeId, Value = amount });
-                    }
+                // Item doesn't exist, add new entry
+                if (!found)
+                {
+                    inventory.Add(new KVPair { Key = subtypeId, Value = amount });
                 }
             }
         }
@@ -176,15 +166,12 @@ namespace ImprovedAI
         /// </summary>
         public bool Exists(string subtypeId)
         {
-            lock (_lock)
+            foreach (var pair in inventory)
             {
-                foreach (var pair in inventory)
-                {
-                    if (pair.Key == subtypeId)
-                        return true;
-                }
-                return false;
+                if (pair.Key == subtypeId)
+                    return true;
             }
+            return false;
         }
 
         /// <summary>
@@ -194,28 +181,25 @@ namespace ImprovedAI
         {
             if (amount <= 0) return false;
 
-            lock (_lock)
+            for (int i = 0; i < inventory.Count; i++)
             {
-                for (int i = 0; i < inventory.Count; i++)
+                var pair = inventory[i];
+                if (pair.Key == subtypeId)
                 {
-                    var pair = inventory[i];
-                    if (pair.Key == subtypeId)
+                    if (pair.Value <= amount)
                     {
-                        if (pair.Value <= amount)
-                        {
-                            // Remove entire entry
-                            inventory.RemoveAt(i);
-                        }
-                        else
-                        {
-                            // Reduce count
-                            inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value - amount };
-                        }
-                        return true;
+                        // Remove entire entry
+                        inventory.RemoveAt(i);
                     }
+                    else
+                    {
+                        // Reduce count
+                        inventory[i] = new KVPair { Key = subtypeId, Value = pair.Value - amount };
+                    }
+                    return true;
                 }
-                return false; // Item not found
             }
+            return false; // Item not found
         }
 
         /// <summary>
@@ -223,14 +207,48 @@ namespace ImprovedAI
         /// </summary>
         public List<KVPair> GetAllItems()
         {
-            lock (_lock)
+            var result = new List<KVPair>();
+            foreach (var pair in inventory)
             {
-                var result = new List<KVPair>();
-                foreach (var pair in inventory)
-                {
-                    result.Add(pair);
-                }
-                return result;
+                result.Add(pair);
+            }
+            return result;
+        }
+
+        public void GetAllItems(List<KVPair> result, bool clear = true)
+        {
+            if (clear)
+                result.Clear();
+            foreach (var pair in inventory)
+            {
+                result.Add(pair);
+            }
+        }
+        public void GetAllItems(MyConcurrentList<KVPair> result, bool clear = true)
+        {
+            if (clear)
+                result.Clear();
+            foreach (var pair in inventory)
+            {
+                result.Add(pair);
+            }
+        }
+        public void GetAllItems(Dictionary<string,int> result, bool clear = true)
+        {
+            if (clear)
+                result.Clear();
+            foreach (var pair in inventory)
+            {
+                result.Add(pair.Key, pair.Value);
+            }
+        }
+        public void GetAllItems(MyConcurrentDictionary<string, int> result, bool clear = true)
+        {
+            if (clear)
+                result.Clear();
+            foreach (var pair in inventory)
+            {
+                result.Add(pair.Key, pair.Value);
             }
         }
 
@@ -239,10 +257,7 @@ namespace ImprovedAI
         /// </summary>
         public int GetItemTypeCount()
         {
-            lock (_lock)
-            {
-                return inventory.Count;
-            }
+            return inventory.Count;
         }
 
         /// <summary>
@@ -250,15 +265,12 @@ namespace ImprovedAI
         /// </summary>
         public int GetTotalItemCount()
         {
-            lock (_lock)
+            int total = 0;
+            foreach (var pair in inventory)
             {
-                int total = 0;
-                foreach (var pair in inventory)
-                {
-                    total += pair.Value;
-                }
-                return total;
+                total += pair.Value;
             }
+            return total;
         }
 
         /// <summary>
@@ -266,10 +278,7 @@ namespace ImprovedAI
         /// </summary>
         public void Clear()
         {
-            lock (_lock)
-            {
-                inventory.Clear();
-            }
+            inventory.Clear();
         }
 
         /// <summary>
@@ -277,10 +286,7 @@ namespace ImprovedAI
         /// </summary>
         public bool IsEmpty()
         {
-            lock (_lock)
-            {
-                return inventory.Count == 0;
-            }
+            return inventory.Count == 0;
         }
 
         /// <summary>
@@ -288,18 +294,15 @@ namespace ImprovedAI
         /// </summary>
         public override string ToString()
         {
-            lock (_lock)
-            {
-                if (inventory.Count == 0)
-                    return "Empty inventory";
+            if (inventory.Count == 0)
+                return "Empty inventory";
 
-                var items = new List<string>();
-                foreach (var pair in inventory)
-                {
-                    items.Add($"{pair.Key}: {pair.Value}");
-                }
-                return string.Join(", ", items);
+            var items = new List<string>();
+            foreach (var pair in inventory)
+            {
+                items.Add($"{pair.Key}: {pair.Value}");
             }
+            return string.Join(", ", items);
         }
     }
 }

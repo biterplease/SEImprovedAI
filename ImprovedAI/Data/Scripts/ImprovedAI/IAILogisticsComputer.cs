@@ -1,6 +1,6 @@
 ﻿using ImprovedAI.Messages;
 using ImprovedAI.Network;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util.Logging;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -278,7 +278,7 @@ namespace ImprovedAI
                 OperationMode = operationMode
             };
 
-            messaging.SendMessage((ushort)MessageTopics.LOGISTIC_REGISTRATION, registration, entityId, requiresAck: false);
+            messaging.SendMessage((ushort)Channel.LOGISTIC_REGISTRATION, registration, entityId, requiresAck: false);
             Log.Info("LogisticsComputer {0} sent registration as {1}", entityId, operationMode);
         }
 
@@ -295,7 +295,7 @@ namespace ImprovedAI
                 OperationMode = operationMode
             };
 
-            messaging.SendMessage((ushort)MessageTopics.LOGISTIC_UPDATE, update, entityId, requiresAck: false);
+            messaging.SendMessage((ushort)Channel.LOGISTIC_UPDATE, update, entityId, requiresAck: false);
         }
 
         /// <summary>
@@ -347,7 +347,7 @@ namespace ImprovedAI
                 IsStatic = connector.CubeGrid.IsStatic
             }; 
 
-            messaging.SendMessage((ushort)MessageTopics.LOGISTIC_PUSH, pushRequest, entityId, requiresAck: false);
+            messaging.SendMessage((ushort)Channel.LOGISTIC_PUSH, pushRequest, entityId, requiresAck: false);
         }
 
         /// <summary>
@@ -378,7 +378,7 @@ namespace ImprovedAI
                 IsStatic = connector.CubeGrid.IsStatic
             };
 
-            messaging.SendMessage((ushort)MessageTopics.LOGISTIC_REQUEST, request, entityId, requiresAck: false);
+            messaging.SendMessage((ushort)Channel.LOGISTIC_REQUEST, request, entityId, requiresAck: false);
             Log.Info("LogisticsComputer {0} requested {1} item types from network",
                 entityId, requestedInventory.GetItemTypeCount());
         }

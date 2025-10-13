@@ -1,8 +1,8 @@
 ﻿using ImprovedAI.Config;
 using ImprovedAI.Messages;
 using ImprovedAI.Network;
-using ImprovedAI.Utils;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util;
+using ImprovedAI.Util.Logging;
 using Sandbox.ModAPI;
 using System;
 using System.Collections.Generic;
@@ -70,18 +70,18 @@ namespace ImprovedAI
         //private static readonly int droneTimeoutSeconds = 1800;
         //private static DateTime lastCacheUpdate;
 
-        private static readonly MessageTopics[] DroneManagementTopics = new MessageTopics[]
+        private static readonly Channel[] DroneManagementTopics = new Channel[]
         {
-            MessageTopics.DRONE_REGISTRATION,
-            MessageTopics.DRONE_REPORTS,
-            MessageTopics.DRONE_PERFORMANCE,
+            Channel.DRONE_REGISTRATION,
+            Channel.DRONE_REPORTS,
+            Channel.DRONE_PERFORMANCE,
         };
-        private static readonly MessageTopics[] logisticsManagementTopics = new MessageTopics[]
+        private static readonly Channel[] logisticsManagementTopics = new Channel[]
          {
-            MessageTopics.LOGISTIC_REGISTRATION,
-            MessageTopics.LOGISTIC_UPDATE,
-            MessageTopics.LOGISTIC_REQUEST,
-            MessageTopics.LOGISTIC_PUSH,
+            Channel.LOGISTIC_REGISTRATION,
+            Channel.LOGISTIC_UPDATE,
+            Channel.LOGISTIC_REQUEST,
+            Channel.LOGISTIC_PUSH,
         };
 
         private MessageQueue messaging = new MessageQueue();
@@ -207,7 +207,7 @@ namespace ImprovedAI
                 Log.Info("scheduler {0} subscribing to topic {1}", schedulerId, MessageUtil.TopicToString(topic));
                 messaging.Subscribe(entityId, (ushort)topic);
             }
-            messaging.Subscribe(entityId, (ushort)MessageTopics.SCHEDULER_FORWARD);
+            messaging.Subscribe(entityId, (ushort)Channel.SCHEDULER_FORWARD);
         }
 
         private void UpdateAI()
@@ -367,7 +367,7 @@ namespace ImprovedAI
                 while (taskQueue.TryDequeue(out task))
                 {
                     var needsAck = false; // repeater does not care
-                    messaging.SendMessage((ushort)MessageTopics.SCHEDULER_FORWARD, task, entityId, needsAck);
+                    messaging.SendMessage((ushort)Channel.SCHEDULER_FORWARD, task, entityId, needsAck);
                 }
             }
             if (registeredDrones.Count != 0 && operationMode.HasFlag(OperationMode.Orchestrator))
@@ -382,7 +382,7 @@ namespace ImprovedAI
                     if (taskQueue.TryDequeue(out task))
                     {
                         var needsAck = true; // delegated messages should be checked, perhaps there is no onet o pick them up
-                        var messageId = messaging.SendMessage((ushort)MessageTopics.SCHEDULER_FORWARD, task, entityId, needsAck);
+                        var messageId = messaging.SendMessage((ushort)Channel.SCHEDULER_FORWARD, task, entityId, needsAck);
                         delegatedTasksNeedingAck.Add(messageId, task.TaskId);
 
                         if (assigned > _maxTasksAssignedPerBatch)
@@ -555,14 +555,14 @@ namespace ImprovedAI
 
         private void ReadDroneRegistrations()
         {
-            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)MessageTopics.DRONE_REGISTRATION, 50);
+            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)Channel.DRONE_REGISTRATION, 50);
             Drone drone;
             foreach (var reg in droneReports)
             {
                 // if exists, redirect the message to drone report queue
                 if (registeredDrones.TryGetValue(reg.DroneEntityId, out drone))
                 {
-                    messaging.SendMessage<DroneReport>((ushort)MessageTopics.DRONE_REPORTS, reg, this.entityId, false);
+                    messaging.SendMessage<DroneReport>((ushort)Channel.DRONE_REPORTS, reg, this.entityId, false);
                     continue;
                 }
                 drone = new Drone(
@@ -582,7 +582,7 @@ namespace ImprovedAI
         }
         private void ReadDroneReports(ushort maxMessages)
         {
-            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)MessageTopics.DRONE_REPORTS, maxMessages);
+            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)Channel.DRONE_REPORTS, maxMessages);
             foreach (var report in droneReports)
             {
                 Drone drone;
@@ -624,7 +624,7 @@ namespace ImprovedAI
                 else
                 {
                     // if not registered, redirect to registration queue
-                    messaging.SendMessage<DroneReport>((ushort)MessageTopics.DRONE_REGISTRATION, report, this.entityId, false);
+                    messaging.SendMessage<DroneReport>((ushort)Channel.DRONE_REGISTRATION, report, this.entityId, false);
                 }
             }
         }
@@ -714,7 +714,7 @@ namespace ImprovedAI
 
         private void ReadForwardedSchedulerMessages()
         {
-            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)MessageTopics.DRONE_REPORTS, (ushort)messageReadLimit);
+            var droneReports = messaging.ReadMessages<DroneReport>(entityId, (ushort)Channel.DRONE_REPORTS, (ushort)messageReadLimit);
             foreach (var report in droneReports) { }
         }
 

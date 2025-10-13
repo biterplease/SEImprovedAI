@@ -1,5 +1,5 @@
 ﻿using ImprovedAI.Config;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Util.Logging;
 using Sandbox.Game.Entities;
 using Sandbox.ModAPI;
 using System;

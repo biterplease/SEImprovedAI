@@ -1,4 +1,4 @@
-﻿using ImprovedAI.Utils.Logging;
+﻿using ImprovedAI.Util.Logging;
 using System;
 using System.Collections.Generic;
 using VRageMath;

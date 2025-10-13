@@ -1,4 +1,4 @@
-﻿using ImprovedAI.Utils.Logging;
+﻿using ImprovedAI.Util.Logging;
 using Sandbox.Common.ObjectBuilders;
 using Sandbox.Game.Entities;
 using Sandbox.Game.EntityComponents;

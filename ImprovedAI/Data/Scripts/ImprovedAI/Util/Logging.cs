@@ -7,7 +7,7 @@ using VRage.Game;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
 
-namespace ImprovedAI.Utils.Logging
+namespace ImprovedAI.Util.Logging
 {
     /// <summary>
     /// Simple static logging class that obeys server configuration
@@ -60,11 +60,11 @@ namespace ImprovedAI.Utils.Logging
             }
         }
 
-        public static void LogDroneNetwork(string msg, params object[] args)
+        public static void LogDroneNetwork(LogLevel level, string msg, params object[] args)
         {
-            if (logDroneNetwork && IsLevelEnabled(LogLevel.Info))
+            if (logDroneNetwork)
             {
-                _logger?.Write("[IAI.DroneNetwork] " + string.Format(msg, args));
+                WriteIfEnabled(level, "[IAI.DroneNetwork] " + msg, args);
             }
         }
 

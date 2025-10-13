@@ -1,4 +1,5 @@
 ﻿using ImprovedAI.Pathfinding;
+using ImprovedAI.VirtualNetwork;
 using Moq;
 using Sandbox.Definitions;
 using Sandbox.ModAPI;
@@ -12,6 +13,14 @@ namespace ImprovedAI.Tests.TestUtil
 {
     public static class SEMockFactory
     {
+        public static IMyUtilitiesDelegate CreateMockUtilities<T>(string returnValue, IMessagePayload returnObject) where T : class, IMessagePayload
+        {
+            var mock = new Mock<IMyUtilitiesDelegate>();
+            mock.Setup(m => m.SerializeFromBinary<IMessagePayload>(It.IsAny<byte[]>()))
+                .Returns<byte[]>(bytes => returnObject);
+            T SerializeFromXML<T>(string buffer);
+            return mock.Object;
+        }
         public static IMyShipController CreateMockController(
              Vector3D position,
              Vector3 gravity = default(Vector3),

@@ -1,5 +1,6 @@
-using ImprovedAI.Utils;
-using ImprovedAI.Utils.Logging;
+using ImprovedAI.Data.Scripts.ImprovedAI.Config;
+using ImprovedAI.Util;
+using ImprovedAI.Util.Logging;
 using Sandbox.ModAPI;
 using System;
 using System.Linq;
@@ -61,7 +62,7 @@ namespace ImprovedAI.Config
         public BlockLimitConfig BlockLimits { get; private set; }
         public PathfindingConfig Pathfinding { get; private set; }
         public DroneControllerBlockConfig Drone { get; private set; }
-        public DroneNetworkConfig DroneNetwork { get; private set; }
+        public MessageQueueConfig MessageQueue { get; private set; }
         public LoggingConfig Logging { get; private set; }
         public SchedulerBlockConfig SchedulerBounds { get; private set; }
         public LogisticsComputerConfig LogisticsComputer { get; private set; }
@@ -74,7 +75,7 @@ namespace ImprovedAI.Config
             Pathfinding = new PathfindingConfig();
             Drone = new DroneControllerBlockConfig();
             SchedulerBounds = new SchedulerBlockConfig();
-            DroneNetwork = new DroneNetworkConfig();
+            MessageQueue = new MessageQueueConfig();
             Logging = new LoggingConfig();
             LogisticsComputer = new LogisticsComputerConfig();
         }
@@ -159,38 +160,6 @@ namespace ImprovedAI.Config
             /// For whatever reason. Default is 5 minutes.
             /// </summary>
             public int ManintenanceIntervalTicks { get; internal set; } = 300; // 30 seconds
-        }
-
-        /// <summary>
-        /// This section is about the Drone network communication.
-        /// System implements a pseudo-messaging system between scheduler and drones.
-        /// </summary>
-        public class DroneNetworkConfig
-        {
-            public bool AllowNetworkBroadcasting { get; internal set; } = true;
-            public float DefaultAntennaRange { get; internal set; } = 1000.0f;
-            public float NetworkUpdateRate { get; internal set; } = 10.0f;
-            /// <summary>
-            /// Schedulers keep a cache of antennas. Limit how often said cache is updated.
-            /// </summary>
-            public int SchedulerAntennaCacheUpdateIntervalTicks { get; internal set; } = 60;
-            /// <summary>
-            /// Throttling for scheduler reading subscribed messages.
-            /// </summary>
-            // 4 messages/second, scheduler expects a lot of messages from managed drones
-            public int SchedulerMessageThrottlingTicks { get; internal set; } = 15;
-            public int SchedulerMessageReadLimit { get; internal set; } = 50;
-            /// <summary>
-            /// Throttling for drone reading subscribed messages.
-            /// </summary>
-            // 1 message every 3 seconds, drone orders are not as frequent.
-            public int DroneMessageThrottlingTicks { get; internal set; } = 180; // 3 seconds
-            /// <summary>
-            /// How long messages live in the message queue.
-            /// </summary>
-            public int MessageRetentionTicks { get; internal set; } = 1800; // 30 seconds
-            public int MessageCleanupIntervalTicks { get; internal set; } = 600; // 10 seconds
-            public MessageSerializationMode MessageSerializationMode { get; internal set; } = MessageSerializationMode.ProtoBuf;
         }
 
         public class LoggingConfig
